@@ -66,4 +66,51 @@ def detection_fraction(mu_loga, std_loga, beta_e, mu_logS, std_logS, bsl_pdf,
     bsl = bsl_pdf.resample(size=size)
     pa = np.random.unif(0., np.pi, size=size)
     fluxes = flux(bsl, pa, S, a, e)
+    n_det = len(np.where(fluxes > S_thr)[0])
+    return float(n_det) / size
 
+
+class Simulation(object):
+    def __init__(self, mu_loga, mu_logs, beta_e, bsl_kde, alpha_e=2.):
+        """
+        mu_loga - 2 values for min & max of mu_loga prior range.
+        mu_logs - 2 values for min & max of mu_logs prior range.
+        beta - 2 values for min & max of beta prior range.
+        """
+        self.mu_loga = mu_loga
+        self.mu_logs = mu_logs
+        self.beta_e = beta_e
+        self.bsl_kde = bsl_kde
+        self.alpha_e = alpha_e
+        self.p = list()
+
+    def run(self, n_acc, fr, tol, s_thr=0.05, size=10 ** 4.):
+        """
+        Run simulation till ``n_acc`` accepted.
+        """
+        # Initialize counting variable
+        n = 0
+        while n < n_acc:
+            # Sample from priors
+            mu_loga = np.random.unif(self.mu_loga[0], self.mu_loga[1])
+            std_loga = np.random.gamma(0.1, 0.1)
+            mu_logs = np.random.unif(self.mu_logs[0], self.mu_logs[1])
+            std_logs = np.random.gamma(0.1, 0.1)
+            beta_e = np.random.unif(self.beta_e[0], self.beta_e[1])
+            frac = detection_fraction(self.mu_loga, self.std_loga, self.beta_e,
+                                      self.mu_logs, self.std_logs, self.bsl_pdf,
+                                      self.alpha_e, s_thr=s_thr, size=size):
+            if abs(frac - fr) <= tol:
+                p = [mu_loga, std_loga, mu_logs, std_logs, beta_e]
+                print "Accepted parameters: " + str(p)
+                self.p.append(p)
+                n += 1
+            else:
+                print "Rejected parameters: " + str(p)
+
+    def reset(self):
+        self.p = list()
+
+    @property
+    def p(self):
+        return np.atleast_2d(self.p)
