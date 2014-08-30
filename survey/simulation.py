@@ -7,6 +7,10 @@ mas_to_rad = 4.85 * 10 ** (-9)
 rad_to_mas = 206.3 * 10 ** 6
 
 
+def ed_to_uv(r, lambda_cm=18.):
+    return r * 100000. / lambda_cm
+
+
 def flux(r, pa, amp, std_x, e):
     """
     Return flux of elliptical gaussian source with major axis (along x-axis,
@@ -134,13 +138,6 @@ class Simulation(object):
         assert(len(fr_list) == len(bsls_borders) - 1)
         # Initialize counting variable
         n = 0
-        # Initialize accepted parameters container
-        parameters = list()
-
-        n_bsls = len(self.bsls)
-
-        fr_array = np.asarray(fr_list)
-        tol_array = np.asarray(tol_list)
 
         # Partition baselines in ranges
         bsls_partitioned = list()
@@ -156,18 +153,17 @@ class Simulation(object):
             e = np.random.beta(self.alpha_e, beta_e)
             # Save in list
             params = [loga, beta_e, logs]
-            # Repeat to make ``n_bsls`` sources with the same parameters
-            loga = loga.repeat(n_bsls)
-            logs = logs.repeat(n_bsls)
-            beta_e = beta_e.repeat(n_bsls)
-            # Simulate ``n_bsls`` random positional angles for baselines
-            pa = np.random.unif(0., np.pi, size=n_bsls)
             # For each range of baselines check summary statistics
             for i, baselines in enumerate(bsls_partitioned):
                 n_ = len(baselines)
                 # Calculate detection fraction in this baseline range
-                fluxes = flux(baselines, pa[:n_], np.exp(logs[:n_]),
-                              np.exp(loga[:n_]), e[:n_])
+                # Repeat to make ``n_`` sources with the same parameters
+                loga = loga.repeat(n_)
+                logs = logs.repeat(n_)
+                beta_e = beta_e.repeat(n_)
+                # Simulate ``n_bsls`` random positional angles for baselines
+                pa = np.random.unif(0., np.pi, size=n_)
+                fluxes = flux(baselines, pa, np.exp(logs), np.exp(loga), e)
                 n_det = len(np.where(fluxes > s_thr)[0])
                 det_fr = float(n_det) / n_
                 # If fail to get right fraction in this range then go to next
@@ -177,40 +173,40 @@ class Simulation(object):
             # If we got stuck here, then fractions in all baseline ranges are
             # within tolerance of the observed.
             n += 1
-            parameters.append(params)
+            self.p.append(params)
 
-    def run(self, n_acc, fr_list, tol_list, s_thr=0.05, size=10 ** 4.):
-        """
-        Run simulation till ``n_acc`` accepted.
-        """
-        # Initialize counting variable
-        fr_array = np.asarray(fr_list)
-        tol_array = np.asarray(tol_list)
-        n = 0
-        while n < n_acc:
-            # Sample from priors
-            mu_loga = np.random.unif(self.loga[0], self.loga[1])
-            std_loga = np.random.gamma(0.1, 0.1)
-            mu_logs = np.random.unif(self.logs[0], self.logs[1])
-            std_logs = np.random.gamma(0.1, 0.1)
-            beta_e = np.random.unif(self.beta_e[0], self.beta_e[1])
-            fractions = list()
-            for fr in fr_list:
-                fractions.append([detection_fraction(self.loga, self.std_loga,
-                                                self.beta_e, self.logs,
-                                                self.std_logs, bsls,
-                                                self.alpha_e, s_thr=s_thr,
-                                                size=size) for bsls in
-                                  self.bsls_list])
-                fractions = np.asarray(fractions)
-            boolean = [abs(frac - fr)]
-            if abs(frac - fr) <= tol:
-                p = [mu_loga, std_loga, mu_logs, std_logs, beta_e]
-                print "Accepted parameters: " + str(p)
-                self.p.append(p)
-                n += 1
-            else:
-                print "Rejected parameters: " + str(p)
+#    def run(self, n_acc, fr_list, tol_list, s_thr=0.05, size=10 ** 4.):
+#        """
+#        Run simulation till ``n_acc`` accepted.
+#        """
+#        # Initialize counting variable
+#        fr_array = np.asarray(fr_list)
+#        tol_array = np.asarray(tol_list)
+#        n = 0
+#        while n < n_acc:
+#            # Sample from priors
+#            mu_loga = np.random.unif(self.loga[0], self.loga[1])
+#            std_loga = np.random.gamma(0.1, 0.1)
+#            mu_logs = np.random.unif(self.logs[0], self.logs[1])
+#            std_logs = np.random.gamma(0.1, 0.1)
+#            beta_e = np.random.unif(self.beta_e[0], self.beta_e[1])
+#            fractions = list()
+#            for fr in fr_list:
+#                fractions.append([detection_fraction(self.loga, self.std_loga,
+#                                                self.beta_e, self.logs,
+#                                                self.std_logs, bsls,
+#                                                self.alpha_e, s_thr=s_thr,
+#                                                size=size) for bsls in
+#                                  self.bsls_list])
+#                fractions = np.asarray(fractions)
+#            boolean = [abs(frac - fr)]
+#            if abs(frac - fr) <= tol:
+#                p = [mu_loga, std_loga, mu_logs, std_logs, beta_e]
+#                print "Accepted parameters: " + str(p)
+#                self.p.append(p)
+#                n += 1
+#            else:
+#                print "Rejected parameters: " + str(p)
 
     def reset(self):
         self.p = list()
