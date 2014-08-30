@@ -161,7 +161,7 @@ class Simulation(object):
                 loga = loga.repeat(n_)
                 logs = logs.repeat(n_)
                 beta_e = beta_e.repeat(n_)
-                # Simulate ``n_bsls`` random positional angles for baselines
+                # Simulate ``n_`` random positional angles for baselines
                 pa = np.random.unif(0., np.pi, size=n_)
                 fluxes = flux(baselines, pa, np.exp(logs), np.exp(loga), e)
                 n_det = len(np.where(fluxes > s_thr)[0])
@@ -169,11 +169,15 @@ class Simulation(object):
                 # If fail to get right fraction in this range then go to next
                 # loop of while
                 if abs(det_fr - fr_list[i]) > tol_list[i]:
+                    # If we got stuck here - then reject current parameters
                     break
-            # If we got stuck here, then fractions in all baseline ranges are
-            # within tolerance of the observed.
-            n += 1
-            self.p.append(params)
+            # This ``else`` is part of ``for``-loop
+            else:
+                # If ```for``-list is exhausted, then keep current parameters
+                # because the fractions in all baseline ranges are within
+                # tolerance of the observed.
+                n += 1
+                self.p.append(params)
 
 #    def run(self, n_acc, fr_list, tol_list, s_thr=0.05, size=10 ** 4.):
 #        """
