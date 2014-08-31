@@ -8,34 +8,42 @@ from utils import flux, mas_to_rad, rad_to_mas, ed_to_uv
 # sources, the the same geometry but distribution of ``logs`` and then
 # distributions for all.
 class Simulation(object):
-    def __init__(self, loga, logs, bsls, e=None):
+    def __init__(self, mu_loga, std_loga, mu_logs, std_logs, beta_e, bsls,
+                 alpha_e=2.0):
         """
         Class that implements simulation of RA survey.
 
-        :param loga:
-            2 values for min & max of ``loga``/``mu_loga`` prior range
-            [log(mas)].
-        :param logs:
-            2 values for min & max of ``logs``/``mu_logs`` prior range
-            [log(Jy)].
+        :param mu_loga:
+            2 values for min & max of uniform prior range on mean of log(major
+            axis) [log(mas)].
+        :param std_loga:
+            2 values for min & max of uniform prior range on std of log(major
+            axis) [log(mas)].
+        :param mu_logs:
+            2 values for min & max of uniform prior range on mean of log(full
+        :param std_logs:
+            2 values for min & max of uniform prior range on std of log(full
+            flux) [log(Jy)].
+        :param beta_e:
+            2 values for min & max of ``beta_e`` prior range of beta-parameter
+            of axis ratio beta distribution.
         :param bsls:
             Array-like of baselines [ED].
-        :param e (optional):
-            2 values for min & max of axis ratio.
+        :param alpha_e (optional):
+            Value of alpha-parameter of axis ratio beta distribution.
         """
-        self.loga = loga
-        self.logs = logs
-        if e is not None:
-            self.e = e
-        else:
-            self.e = [0., 1.]
+        self.mu_loga = mu_loga
+        self.std_loga = std_loga
+        self.mu_logs = mu_logs
+        self.std_logs = std_logs
+        self.beta_e = beta_e
+        self.alpha_e = alpha_e
         self.bsls = np.asarray(bsls)
         self._p = []
 
     def run1(self, n_acc, fr_list, tol_list, bsls_borders=None, s_thr=0.05):
         """
-        Run simulation with same values of ``loga``, ``beta_e`` & ``logs`` till
-        ``n_acc`` parameters are accepted.
+        Run simulation till ``n_acc`` parameters are accepted.
         :param n_acc:
             Accepted number of parameters to stop simulation.
         :param fr_list
@@ -52,11 +60,13 @@ class Simulation(object):
 
         :notes:
             Size of samples used to count acceptance fractions is determined by
-            number of baselines used (``self.bsls``)
+            number of baselines in each baseline interval.
 
         :return:
-            List of n lists of parameters [``loga``, ``beta_e``, ``logs``] that
-            give detection fractions equal to observed within tolerance.
+            List of n lists of parameters [``mu_loga``, ``std_loga``,
+            ``mu_logs``, ``std_logs``, ``beta_e``] that generate samples of
+            sources that give detection fractions equal to observed ones within
+            specified tolerance.
         """
         np.random.seed(123)
         # Assertions
@@ -74,39 +84,18 @@ class Simulation(object):
         print [len(part) for part in bsls_partitioned]
         while n <= n_acc:
             print "Accepted up to now : " + str(self.p)
-            # Simulate ``n_bsls`` sources
-            # First simulate one value
-            loga = np.random.uniform(self.loga[0], self.loga[1])
-            logs = np.random.uniform(self.logs[0], self.logs[1])
-            e = np.random.uniform(self.e[0], self.e[1])
-            # Save in list
-            params = [loga, logs, e]
+            params = self.draw_parameters()
             print "Trying parameters " + str(params)
             # For each range of baselines check summary statistics
             for i, baselines in enumerate(bsls_partitioned):
+
                 n_ = len(baselines)
-                print "n_ is " + str(n_)
-                # Calculate detection fraction in this baseline range
-                # Repeat to make ``n_`` sources with the same parameters
-                loga_ = np.asarray(loga).repeat(n_)
-                logs_ = np.asarray(logs).repeat(n_)
-                e_ = np.asarray(e).repeat(n_)
                 # Simulate ``n_`` random positional angles for baselines
                 pa = np.random.uniform(0., np.pi, size=n_)
-                print "Got pa " + str(pa)
                 baselines = ed_to_uv(baselines)
-                print "Calculating flux for source with :"
-                print "a = " + str(np.exp(loga_[0])) + " mas"
-                print "S = " + str(np.exp(logs_[0])) + " Jy"
-                print "e = " + str(e_)
-                print "On baselines " + str(baselines)
-                print "lengths : "
-                print len(baselines), len(pa), len(logs_), len(loga_), len(e_)
-                fluxes = flux(baselines, pa, np.exp(logs_),
-                              mas_to_rad * np.exp(loga_), e_)
-                print "Got fluxes " + str(fluxes)
-                n_det = len(np.where(fluxes > s_thr)[0])
-                det_fr = float(n_det) / n_
+                sample = self.create_sample(params, size=n_)
+                det_fr = self.detection_fraction_of_sample(sample, baselines,
+                                                           pa, s_thr)
                 print "Got detection fraction " + str(det_fr)
                 # If fail to get right fraction in this range then go to next
                 # loop of while
@@ -124,38 +113,58 @@ class Simulation(object):
                 n += 1
                 self._p.append(params)
 
-#    def run(self, n_acc, fr_list, tol_list, s_thr=0.05, size=10 ** 4.):
-#        """
-#        Run simulation till ``n_acc`` accepted.
-#        """
-#        # Initialize counting variable
-#        fr_array = np.asarray(fr_list)
-#        tol_array = np.asarray(tol_list)
-#        n = 0
-#        while n < n_acc:
-#            # Sample from priors
-#            mu_loga = np.random.unif(self.loga[0], self.loga[1])
-#            std_loga = np.random.gamma(0.1, 0.1)
-#            mu_logs = np.random.unif(self.logs[0], self.logs[1])
-#            std_logs = np.random.gamma(0.1, 0.1)
-#            beta_e = np.random.unif(self.beta_e[0], self.beta_e[1])
-#            fractions = list()
-#            for fr in fr_list:
-#                fractions.append([detection_fraction(self.loga, self.std_loga,
-#                                                self.beta_e, self.logs,
-#                                                self.std_logs, bsls,
-#                                                self.alpha_e, s_thr=s_thr,
-#                                                size=size) for bsls in
-#                                  self.bsls_list])
-#                fractions = np.asarray(fractions)
-#            boolean = [abs(frac - fr)]
-#            if abs(frac - fr) <= tol:
-#                p = [mu_loga, std_loga, mu_logs, std_logs, beta_e]
-#                print "Accepted parameters: " + str(p)
-#                self.p.append(p)
-#                n += 1
-#            else:
-#                print "Rejected parameters: " + str(p)
+    def draw_parameters(self):
+        """
+        Draw parameters from priors specified in constructor.
+        """
+        mu_loga = np.random.uniform(self.mu_loga[0], self.mu_loga[1])
+        std_loga = np.random.uniform(self.std_loga[0], self.std_loga[1])
+        mu_logs = np.random.uniform(self.mu_logs[0], self.mu_logs[1])
+        std_logs = np.random.uniform(self.std_logs[0], self.std_logs[1])
+        beta_e = np.random.uniform(self.beta_e[0], self.beta_e[1])
+        return mu_loga, std_loga, mu_logs, std_logs, beta_e
+
+    def create_sample(self, parameters, size):
+        """
+        Create sample os sources (sizes, full fluxes & axis ratios) with size =
+        ``size`` using parameters of distributions, specified in ``parameters``.
+        :param parameters:
+            Array-like of ``mu_loga``, ``std_loga``, ``mu_logs``, ``std_logs``,
+            ``beta_e``.
+        :param size:
+            Size of sample to generate.
+        :return:
+            Numpy arrays of size, full flux & axis ratios each of size =
+            ``size``.
+        """
+        mu_loga, std_loga, mu_logs, std_logs, beta_e = parameters
+        # Draw sample of size ``size`` from distributions with parameters
+        loga = np.random.normal(mu_loga, std_loga, size=size)
+        logs = np.random.normal(mu_logs, std_logs, size=size)
+        e = np.random.beta(self.alpha_e, beta_e, size=size)
+        return np.exp(loga), np.exp(logs), e
+
+    def detection_fraction_of_sample(self, sample, baselines, pa, s_thr):
+        """
+        Test ``sample`` of sources for detection fraction on ``baselines`` with
+        positional angles ``pa``.
+        :param sample:
+            Array-like of (size, total flux, axis ratio) numpy arrays.
+        :param baselines:
+            Numpy array of baseline length.
+        :param pa:
+            Numpy array of baseline PA.
+        :param s_thr:
+            Threshold detection flux on each baseline.
+        :return:
+            Detection fraction.
+        """
+        a, s, e = sample
+        n = len(baselines)
+        fluxes = flux(baselines, pa, s, mas_to_rad * a, e)
+        print "Got fluxes " + str(fluxes)
+        n_det = len(np.where(fluxes > s_thr)[0])
+        return float(n_det) / n
 
     def reset(self):
         self._p = list()
@@ -171,7 +180,8 @@ class Simulation(object):
 
 if __name__ == '__main__':
 
-    simulation = Simulation([-3., -0.], [-2., 0.], np.arange(0.1, 30, 0.001))
+    simulation = Simulation([-3., -0.], [0.01, 1], [-2., 0.], [0.01, 1.],
+                            [1., 5.], np.arange(0.1, 30, 0.001))
     bsls_borders = [10., 20., 25.]
     fr_list = [0.2, 0.05]
     tol_list = [0.05, 0.02]
