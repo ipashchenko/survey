@@ -160,6 +160,7 @@ class Simulation(object):
             Detection fraction.
         """
         a, s, e = sample
+        a *= mas_to_rad
         n = len(baselines)
         fluxes = flux(baselines, pa, s, mas_to_rad * a, e)
         print "Got fluxes " + str(fluxes)
