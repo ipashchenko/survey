@@ -8,7 +8,7 @@ from utils import flux, mas_to_rad, rad_to_mas, ed_to_uv
 # sources, the the same geometry but distribution of ``logs`` and then
 # distributions for all.
 class Simulation(object):
-    def __init__(self, loga, logs, beta_e, bsls, alpha_e=2.):
+    def __init__(self, loga, logs, bsls, e=None):
         """
         Class that implements simulation of RA survey.
 
@@ -18,19 +18,18 @@ class Simulation(object):
         :param logs:
             2 values for min & max of ``logs``/``mu_logs`` prior range
             [log(Jy)].
-        :param beta_e:
-            2 values for min & max of beta-parameter prior range for beta
-            function.
         :param bsls:
             Array-like of baselines [ED].
-        :param alpha_e (optional):
-            Alpha-parameter of beta function.
+        :param e (optional):
+            2 values for min & max of axis ratio.
         """
         self.loga = loga
         self.logs = logs
-        self.beta_e = beta_e
+        if e is not None:
+            self.e = e
+        else:
+            self.e = [0., 1.]
         self.bsls = np.asarray(bsls)
-        self.alpha_e = alpha_e
         self._p = []
 
     def run1(self, n_acc, fr_list, tol_list, bsls_borders=None, s_thr=0.05):
@@ -79,10 +78,9 @@ class Simulation(object):
             # First simulate one value
             loga = np.random.uniform(self.loga[0], self.loga[1])
             logs = np.random.uniform(self.logs[0], self.logs[1])
-            beta_e = np.random.uniform(self.beta_e[0], self.beta_e[1])
-            e = np.random.beta(self.alpha_e, beta_e)
+            e = np.random.uniform(self.e[0], self.e[1])
             # Save in list
-            params = [loga, beta_e, logs]
+            params = [loga, logs, e]
             print "Trying parameters " + str(params)
             # For each range of baselines check summary statistics
             for i, baselines in enumerate(bsls_partitioned):
@@ -98,8 +96,8 @@ class Simulation(object):
                 print "Got pa " + str(pa)
                 baselines = ed_to_uv(baselines)
                 print "Calculating flux for source with :"
-                print "S = " + str(np.exp(logs_[0])) + " Jy"
                 print "a = " + str(np.exp(loga_[0])) + " mas"
+                print "S = " + str(np.exp(logs_[0])) + " Jy"
                 print "e = " + str(e_)
                 print "On baselines " + str(baselines)
                 print "lengths : "
@@ -173,8 +171,7 @@ class Simulation(object):
 
 if __name__ == '__main__':
 
-    simulation = Simulation([-3., -0.], [-2., 0.], [1., 5.],
-                            np.arange(0.1, 30, 0.001))
+    simulation = Simulation([-3., -0.], [-2., 0.], np.arange(0.1, 30, 0.001))
     bsls_borders = [10., 20., 25.]
     fr_list = [0.2, 0.05]
     tol_list = [0.05, 0.02]
