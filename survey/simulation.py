@@ -1,92 +1,7 @@
 import numpy as np
 #from numpy.random import RandomState
-from scipy.stats import gaussian_kde
+from utils import flux, mas_to_rad, rad_to_mas, ed_to_uv
 
-
-mas_to_rad = 4.85 * 10 ** (-9)
-rad_to_mas = 206.3 * 10 ** 6
-
-
-def ed_to_uv(r, lambda_cm=18.):
-    return r * 100000. / lambda_cm
-
-
-def flux(r, pa, amp, std_x, e):
-    """
-    Return flux of elliptical gaussian source with major axis (along x-axis,
-    which is along u-axis) FWHM = 2*sqrt(2*log(2))*s_x at uv-radius ``r`` and
-    positional angle ``pa``.
-    :param r:
-        Uv-radius [lambda^(-1)]
-    :param pa:
-        Positional angle of baseline (from u to v) [rad].
-    :param amp:
-        Amplitude of component [Jy].
-    :param std_x:
-        Major axis std in image plane [mas]. Corresponds to u-coordinate.
-    :param e:
-        Ratio of minor to major axis (``std_y``/``std_x``) of elliptical
-        component.
-    :return:
-        Value of correlated flux at uv-point ()
-    """
-
-    std_u = 1. / (std_x * mas_to_rad)
-
-    return amp * np.exp(-(r ** 2. * (1. + e ** 2. * np.tan(pa) ** 2.)) /
-                        (2. * std_u ** 2. * (1. + np.tan(pa) ** 2.)))
-
-
-def get_samples_from_beta(alpha, beta, *args, **kwargs):
-    return np.random.beta(alpha, beta, *args, **kwargs)
-
-
-def get_samples_from_normal(mean, tau, size=10 ** 4):
-    return np.random.normal(loc=mean, scale=1. / np.sqrt(tau), size=size)
-
-
-def detection_fraction(mu_loga, std_loga, beta_e, mu_logs, std_logs, bsls,
-                       alpha_e=2., s_thr=0.05, size=10 ** 5):
-    """
-    Returns detection fraction for distribution of source sizes with log(major
-    axis) ~ N(loga, std_loga), minor-to-major axis distribution ~
-    Beta(alpha_e, beta_e), log(flux) at zero (u,v)-point distribution ~
-    N(mu_logS, tau_logS) and baseline length pdf ``bsl_pdf`` (e.g. from kernel
-    estimate).
-
-    :param mu_loga:
-        Mean of normal distribution for loga, where a [mas].
-    :param std_loga:
-        Std of normal distribution for loga, where a [mas].
-    :param beta_e:
-    :param mu_logs:
-        Mean of normal distribution for logs, where s [Jy].
-    :param std_logs:
-        Std of normal distribution for logs, where s [Jy].
-    :param bsls:
-        Baselines. Array-like with size=``size``. If it is not, then resample
-        to ``size``.
-    :param alpha_e (optional):
-        Parameter of Beta-distribution for axis ratios. Default = 2.
-    :param s_thr:
-        Threshold flux for detection [Jy].
-    :param size:
-        Size of samples to draw.g
-    :return:
-    """
-    #prng = RandomState(123)
-    np.random.seed(123)
-    loga = np.random.normal(loc=mu_loga, scale=std_loga, size=size)
-    a = np.exp(loga)
-    e = np.random.beta(alpha_e, beta_e, size=size)
-    logs = np.random.normal(loc=mu_logs, scale=std_logs, size=size)
-    s = np.exp(logs)
-    if not len(bsls) == size:
-        bsls = np.random.choice(bsls, size=size)
-    pa = np.random.unif(0., np.pi, size=size)
-    fluxes = flux(bsls, pa, s, a, e)
-    n_det = len(np.where(fluxes > s_thr)[0])
-    return float(n_det) / size
 
 
 # TODO: First, use the same ``loga``, ``beta_e`` (geometry) & ``logs`` for all
@@ -95,17 +10,28 @@ def detection_fraction(mu_loga, std_loga, beta_e, mu_logs, std_logs, bsls,
 class Simulation(object):
     def __init__(self, loga, logs, beta_e, bsls, alpha_e=2.):
         """
-        loga - 2 values for min & max of ``loga``/``mu_loga`` prior range.
-        logs - 2 values for min & max of ``logs``/``mu_logs`` prior range.
-        beta - 2 values for min & max of beta prior range.
-        bsls - Array-like of baselines.
+        Class that implements simulation of RA survey.
+
+        :param loga:
+            2 values for min & max of ``loga``/``mu_loga`` prior range
+            [log(mas)].
+        :param logs:
+            2 values for min & max of ``logs``/``mu_logs`` prior range
+            [log(Jy)].
+        :param beta_e:
+            2 values for min & max of beta-parameter prior range for beta
+            function.
+        :param bsls:
+            Array-like of baselines [ED].
+        :param alpha_e (optional):
+            Alpha-parameter of beta function.
         """
         self.loga = loga
         self.logs = logs
         self.beta_e = beta_e
         self.bsls = np.asarray(bsls)
         self.alpha_e = alpha_e
-        self.p = list()
+        self._p = []
 
     def run1(self, n_acc, fr_list, tol_list, bsls_borders=None, s_thr=0.05):
         """
@@ -123,7 +49,7 @@ class Simulation(object):
             [bsls_borders[1], bsls_borders[2]], ..., [bsls_borders[n-1],
             bsls_borders[n]]. Length must be ``len(fr_list) + 1``.
         :param s_thr:
-            Flux detection threshold.
+            Flux detection threshold [Jy].
 
         :notes:
             Size of samples used to count acceptance fractions is determined by
@@ -133,6 +59,7 @@ class Simulation(object):
             List of n lists of parameters [``loga``, ``beta_e``, ``logs``] that
             give detection fractions equal to observed within tolerance.
         """
+        np.random.seed(123)
         # Assertions
         assert(len(fr_list) == len(tol_list))
         assert(len(fr_list) == len(bsls_borders) - 1)
@@ -142,42 +69,62 @@ class Simulation(object):
         # Partition baselines in ranges
         bsls_partitioned = list()
         for i in range(len(bsls_borders) - 1):
-            bsls_partitioned.append(np.where(self.bsls > bsls_borders[i] &
-                                             self.bsls < bsls_borders[i + 1]))
+            bsls_partitioned.append(self.bsls[np.where((self.bsls > bsls_borders[i]) &
+                                             (self.bsls < bsls_borders[i + 1]))[0]])
+        print bsls_partitioned
+        print [len(part) for part in bsls_partitioned]
         while n <= n_acc:
+            print "Accepted up to now : " + str(self.p)
             # Simulate ``n_bsls`` sources
             # First simulate one value
-            loga = np.random.unif(self.loga[0], self.loga[1])
-            logs = np.random.unif(self.logs[0], self.logs[1])
-            beta_e = np.random.unif(self.beta_e[0], self.beta_e[1])
+            loga = np.random.uniform(self.loga[0], self.loga[1])
+            logs = np.random.uniform(self.logs[0], self.logs[1])
+            beta_e = np.random.uniform(self.beta_e[0], self.beta_e[1])
             e = np.random.beta(self.alpha_e, beta_e)
             # Save in list
             params = [loga, beta_e, logs]
+            print "Trying parameters " + str(params)
             # For each range of baselines check summary statistics
             for i, baselines in enumerate(bsls_partitioned):
                 n_ = len(baselines)
+                print "n_ is " + str(n_)
                 # Calculate detection fraction in this baseline range
                 # Repeat to make ``n_`` sources with the same parameters
-                loga = loga.repeat(n_)
-                logs = logs.repeat(n_)
-                beta_e = beta_e.repeat(n_)
+                loga_ = np.asarray(loga).repeat(n_)
+                logs_ = np.asarray(logs).repeat(n_)
+                e_ = np.asarray(e).repeat(n_)
                 # Simulate ``n_`` random positional angles for baselines
-                pa = np.random.unif(0., np.pi, size=n_)
-                fluxes = flux(baselines, pa, np.exp(logs), np.exp(loga), e)
+                pa = np.random.uniform(0., np.pi, size=n_)
+                print "Got pa " + str(pa)
+                baselines = ed_to_uv(baselines)
+                print "Calculating flux for source with :"
+                print "S = " + str(np.exp(logs_[0])) + " Jy"
+                print "a = " + str(np.exp(loga_[0])) + " mas"
+                print "e = " + str(e_)
+                print "On baselines " + str(baselines)
+                print "lengths : "
+                print len(baselines), len(pa), len(logs_), len(loga_), len(e_)
+                fluxes = flux(baselines, pa, np.exp(logs_),
+                              mas_to_rad * np.exp(loga_), e_)
+                print "Got fluxes " + str(fluxes)
                 n_det = len(np.where(fluxes > s_thr)[0])
                 det_fr = float(n_det) / n_
+                print "Got detection fraction " + str(det_fr)
                 # If fail to get right fraction in this range then go to next
                 # loop of while
                 if abs(det_fr - fr_list[i]) > tol_list[i]:
-                    # If we got stuck here - then reject current parameters
+                    # If we got stuck here - then reject current parameters and
+                    # got to next ``while``-loop
+                    print "Rejecting parameter!"
                     break
             # This ``else`` is part of ``for``-loop
             else:
                 # If ```for``-list is exhausted, then keep current parameters
                 # because the fractions in all baseline ranges are within
                 # tolerance of the observed.
+                print "This parameter is accepted!"
                 n += 1
-                self.p.append(params)
+                self._p.append(params)
 
 #    def run(self, n_acc, fr_list, tol_list, s_thr=0.05, size=10 ** 4.):
 #        """
@@ -213,34 +160,42 @@ class Simulation(object):
 #                print "Rejected parameters: " + str(p)
 
     def reset(self):
-        self.p = list()
+        self._p = list()
 
     @property
     def p(self):
-        return np.atleast_2d(self.p)
+        return np.atleast_2d(self._p)
+
+    @p.setter
+    def p(self, value):
+        self._p = value
 
 
 if __name__ == '__main__':
-    lines = [line.strip() for line in open('exp_bsl_st.txt')]
-    data = list()
-    for line in lines:
-       data.extend([line.split()])
-    exp_name, base_ed, status = zip(*data)
-    exp_names_u, indxs = np.unique(exp_name, return_index=True)
-    baselines = []
-    for ind, exp in zip(indxs, exp_names_u):
-        baselines.append(data[ind][1])
-    status = []
-    for ind, exp in zip(indxs, exp_names_u):
-        status.append(data[ind][2])
-    baselines = [float(bsl) for bsl in baselines]
-    # Resample to get "more data"
-    big = np.random.choice(baselines, size=10000)
-    bsl_kde = gaussian_kde(big)
+
+    simulation = Simulation([-3., -0.], [-2., 0.], [1., 5.],
+                            np.arange(0.1, 30, 0.001))
+    bsls_borders = [10., 20., 25.]
+    fr_list = [0.2, 0.05]
+    tol_list = [0.05, 0.02]
+    simulation.run1(100, fr_list, tol_list, bsls_borders=bsls_borders,
+                    s_thr=0.02)
+    pass
 
 
-
-
-
-
-
+#    lines = [line.strip() for line in open('exp_bsl_st.txt')]
+#    data = list()
+#    for line in lines:
+#       data.extend([line.split()])
+#    exp_name, base_ed, status = zip(*data)
+#    exp_names_u, indxs = np.unique(exp_name, return_index=True)
+#    baselines = []
+#    for ind, exp in zip(indxs, exp_names_u):
+#        baselines.append(data[ind][1])
+#    status = []
+#    for ind, exp in zip(indxs, exp_names_u):
+#        status.append(data[ind][2])
+#    baselines = [float(bsl) for bsl in baselines]
+#    # Resample to get "more data"
+#    big = np.random.choice(baselines, size=10000)
+#    bsl_kde = gaussian_kde(big)
