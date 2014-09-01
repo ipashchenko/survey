@@ -94,7 +94,7 @@ class Simulation(object):
                 pa = np.random.uniform(0., np.pi, size=n_)
                 baselines = ed_to_uv(baselines)
                 sample = self.create_sample(params, size=n_)
-                det_fr = self.detection_fraction_of_sample(sample, baselines,
+                det_fr = self.observe_sample(sample, baselines,
                                                            pa, s_thr)
                 print "Got detection fraction " + str(det_fr)
                 # If fail to get right fraction in this range then go to next
@@ -144,7 +144,7 @@ class Simulation(object):
         e = np.random.beta(self.alpha_e, beta_e, size=size)
         return np.exp(loga), np.exp(logs), e
 
-    def detection_fraction_of_sample(self, sample, baselines, pa, s_thr):
+    def observe_sample(self, sample, baselines, pa, s_thr):
         """
         Test ``sample`` of sources for detection fraction on ``baselines`` with
         positional angles ``pa``.
@@ -191,19 +191,3 @@ if __name__ == '__main__':
     pass
 
 
-#    lines = [line.strip() for line in open('exp_bsl_st.txt')]
-#    data = list()
-#    for line in lines:
-#       data.extend([line.split()])
-#    exp_name, base_ed, status = zip(*data)
-#    exp_names_u, indxs = np.unique(exp_name, return_index=True)
-#    baselines = []
-#    for ind, exp in zip(indxs, exp_names_u):
-#        baselines.append(data[ind][1])
-#    status = []
-#    for ind, exp in zip(indxs, exp_names_u):
-#        status.append(data[ind][2])
-#    baselines = [float(bsl) for bsl in baselines]
-#    # Resample to get "more data"
-#    big = np.random.choice(baselines, size=10000)
-#    bsl_kde = gaussian_kde(big)
