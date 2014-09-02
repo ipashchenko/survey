@@ -42,15 +42,14 @@ class Simulation(object):
         self.bsls = np.asarray(bsls)
         self._p = []
 
-    def run1(self, n_acc, fr_list, tol_list, bsls_borders=None, s_thr=0.05):
+    def run(self, n_acc, fr_list, bsls_borders=None, s_thr=0.05):
         """
         Run simulation till ``n_acc`` parameters are accepted.
         :param n_acc:
             Accepted number of parameters to stop simulation.
         :param fr_list
-            Array-like of observed fractions.
-        :param tol_list:
-            Array-like of tolerances. The same length as ``fr_list``.
+            List of lists of observed fractions. Each list contains low and high
+            point of corresponding HDI interval.
         :param bsls_borders:
             Array-like of borders for baseline ranges. Fractions will be
             compared in intervals [bsls_borders[0], bsls_borders[1]],
@@ -71,7 +70,6 @@ class Simulation(object):
         """
         np.random.seed(123)
         # Assertions
-        assert(len(fr_list) == len(tol_list))
         assert(len(fr_list) == len(bsls_borders) - 1)
         # Initialize counting variable
         n = 0
@@ -100,9 +98,10 @@ class Simulation(object):
                 print "Got detection fraction " + str(det_fr)
                 # If fail to get right fraction in this range then go to next
                 # loop of while
-                if abs(det_fr - fr_list[i]) > tol_list[i]:
+                if (det_fr < fr_list[i][0]) or (det_fr > fr_list[i][1]):
                     # If we got stuck here - then reject current parameters and
                     # got to next ``while``-loop
+                    print str(det_fr) + " not in HDI : " + str(fr_list[i])
                     print "Rejecting parameter!"
                     break
             # This ``else`` is part of ``for``-loop
