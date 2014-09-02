@@ -32,7 +32,7 @@ def get_baselines_exper_averaged(fname):
     for exp_name_u in exp_names_u:
         exp_baselines = adata[np.where(adata[:, 0] == exp_name_u)][:, 1]
         mean_baselines.append(np.mean(vfloat(exp_baselines)))
-    return mean_baselines
+    return np.asarray(mean_baselines)
 
 
 def get_unique_experiments_dict(data):
