@@ -1,35 +1,36 @@
 import numpy as np
 #from numpy.random import RandomState
-from utils import flux, mas_to_rad, rad_to_mas, ed_to_uv
+from scipy.stats import halfcauchy
+from utils import flux, mas_to_rad, rad_to_mas, ed_to_uv, get_ratio_hdi
+from load_data import get_baselines_exper_averaged,\
+    get_detection_fraction_in_baseline_range
 
 
-
-# TODO: First, use the same ``loga``, ``beta_e`` (geometry) & ``logs`` for all
-# sources, the the same geometry but distribution of ``logs`` and then
-# distributions for all.
 class Simulation(object):
-    def __init__(self, mu_loga, std_loga, mu_logs, std_logs, beta_e, bsls,
-                 alpha_e=2.0):
+    def __init__(self, mu_logs, mu_loga, beta_e, bsls, std_loga=None,
+                 std_logs=None, hc_scale=0.2, alpha_e=5.0):
         """
         Class that implements simulation of RA survey.
 
         :param mu_loga:
             2 values for min & max of uniform prior range on mean of log(major
             axis) [log(mas)].
-        :param std_loga:
-            2 values for min & max of uniform prior range on std of log(major
-            axis) [log(mas)].
         :param mu_logs:
             2 values for min & max of uniform prior range on mean of log(full
-            flux) [log(Jy)].
-        :param std_logs:
-            2 values for min & max of uniform prior range on std of log(full
             flux) [log(Jy)].
         :param beta_e:
             2 values for min & max of ``beta_e`` prior range of beta-parameter
             of axis ratio beta distribution.
         :param bsls:
             Array-like of baselines [ED].
+        :param std_logs (optional):
+            2 values for min & max of uniform prior range on std of log(full
+            flux) [log(Jy)]. If ``None`` then use half-cauchy prior.
+        :param std_loga (optional):
+            2 values for min & max of uniform prior range on std of log(major
+            axis) [log(mas)]. If ``None`` then use half-cauchy prior.
+        :param hc_scale (optional):
+            Scale parameter for half-cauchy prior.
         :param alpha_e (optional):
             Value of alpha-parameter of axis ratio beta distribution.
         """
@@ -39,6 +40,7 @@ class Simulation(object):
         self.std_logs = std_logs
         self.beta_e = beta_e
         self.alpha_e = alpha_e
+        self.hc_scale = hc_scale
         self.bsls = np.asarray(bsls)
         self._p = []
 
@@ -93,8 +95,7 @@ class Simulation(object):
                 pa = np.random.uniform(0., np.pi, size=n_)
                 baselines = ed_to_uv(baselines)
                 sample = self.create_sample(params, size=n_)
-                det_fr = self.observe_sample(sample, baselines,
-                                                           pa, s_thr)
+                det_fr = self.observe_sample(sample, baselines, pa, s_thr)
                 print "Got detection fraction " + str(det_fr)
                 # If fail to get right fraction in this range then go to next
                 # loop of while
@@ -118,9 +119,15 @@ class Simulation(object):
         Draw parameters from priors specified in constructor.
         """
         mu_loga = np.random.uniform(self.mu_loga[0], self.mu_loga[1])
-        std_loga = np.random.uniform(self.std_loga[0], self.std_loga[1])
+        if self.std_loga is None:
+            std_loga = float(halfcauchy.rvs(scale=self.hc_scale, size=1))
+        else:
+            std_loga = np.random.uniform(self.std_loga[0], self.std_loga[1])
         mu_logs = np.random.uniform(self.mu_logs[0], self.mu_logs[1])
-        std_logs = np.random.uniform(self.std_logs[0], self.std_logs[1])
+        if self.std_logs is None:
+            std_logs = float(halfcauchy.rvs(scale=self.hc_scale, size=1))
+        else:
+            std_logs = np.random.uniform(self.std_logs[0], self.std_logs[1])
         beta_e = np.random.uniform(self.beta_e[0], self.beta_e[1])
         return mu_loga, std_loga, mu_logs, std_logs, beta_e
 
@@ -163,7 +170,8 @@ class Simulation(object):
         a *= mas_to_rad
         n = len(baselines)
         fluxes = flux(baselines, pa, s, mas_to_rad * a, e)
-        print "Got fluxes " + str(fluxes)
+        #print "Got fluxes " + str(fluxes)
+        #print "On baselines " + str(baselines)
         n_det = len(np.where(fluxes > s_thr)[0])
         return float(n_det) / n
 
@@ -181,13 +189,17 @@ class Simulation(object):
 
 if __name__ == '__main__':
 
-    simulation = Simulation([-3., -0.], [0.01, 1], [-2., 0.], [0.01, 1.],
-                            [1., 5.], np.arange(0.1, 30, 0.001))
-    bsls_borders = [10., 20., 25.]
-    fr_list = [0.2, 0.05]
-    tol_list = [0.05, 0.02]
-    simulation.run1(100, fr_list, tol_list, bsls_borders=bsls_borders,
-                    s_thr=0.02)
-    pass
+    fname = '/home/ilya/Dropbox/survey/exp_bsl_st.txt'
+    bsls = get_baselines_exper_averaged(fname)
+    bsls_borders = [5., 10., 20., 30.]
+    fractions = get_detection_fraction_in_baseline_range(fname, bsls_borders)
+    frac_list = list()
+    for frac in fractions:
+        hdi0, hdi1 = get_ratio_hdi(frac[0], frac[1])
+        frac_list.append([hdi0, hdi1])
+    print "Using fractions :"
+    print frac_list
 
+    simulation = Simulation([-2., -0.], [-3., 0.], [1., 25.], bsls)
+    simulation.run(100, frac_list, bsls_borders=bsls_borders, s_thr=0.03)
 
