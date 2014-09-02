@@ -21,6 +21,7 @@ class Simulation(object):
             axis) [log(mas)].
         :param mu_logs:
             2 values for min & max of uniform prior range on mean of log(full
+            flux) [log(Jy)].
         :param std_logs:
             2 values for min & max of uniform prior range on std of log(full
             flux) [log(Jy)].
