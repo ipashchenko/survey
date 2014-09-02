@@ -156,13 +156,13 @@ class Simulation(object):
         Test ``sample`` of sources for detection fraction on ``baselines`` with
         positional angles ``pa``.
         :param sample:
-            Array-like of (size, total flux, axis ratio) numpy arrays.
+            Array-like of (total flux, size, axis ratio) numpy arrays.
         :param baselines:
-            Numpy array of baseline length.
+            Numpy array of baseline length [lambda].
         :param pa:
-            Numpy array of baseline PA.
+            Numpy array of baseline PA [rad].
         :param s_thr:
-            Threshold detection flux on each baseline.
+            Threshold detection flux on each baseline [Jy].
         :return:
             Detection fraction.
         """
