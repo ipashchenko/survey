@@ -36,14 +36,6 @@ def flux(r, pa, amp, std_x, e):
                         (2. * std_u ** 2. * (1. + np.tan(pa) ** 2.)))
 
 
-def get_samples_from_beta(alpha, beta, *args, **kwargs):
-    return np.random.beta(alpha, beta, *args, **kwargs)
-
-
-def get_samples_from_normal(mean, tau, size=10 ** 4):
-    return np.random.normal(loc=mean, scale=1. / np.sqrt(tau), size=size)
-
-
 def hdi_of_icdf(name, cred_mass=0.95, tol=1e-08, *args, **kwargs):
     """
     :param name:
@@ -64,4 +56,5 @@ def hdi_of_icdf(name, cred_mass=0.95, tol=1e-08, *args, **kwargs):
         return name.ppf(cred_mass + low_tail_prob) - name.ppf(low_tail_prob)
 
     hdi_low_tail_prob = fmin(interval_width, 0, (name, cred_mass,), xtol=tol)
+
     return name.ppf(hdi_low_tail_prob), name.ppf(hdi_low_tail_prob + cred_mass)
