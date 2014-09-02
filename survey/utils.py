@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.optimize import fmin
+from scipy.stats import beta as sbeta
 
 
 mas_to_rad = 4.85 * 10 ** (-9)
@@ -35,8 +36,19 @@ def flux(r, pa, amp, std_x, e):
     return amp * np.exp(-(r ** 2. * (1. + e ** 2. * np.tan(pa) ** 2.)) /
                         (2. * std_u ** 2. * (1. + np.tan(pa) ** 2.)))
 
+def size(flux, r, flux0, r0=1.):
+    """
+    Get size estimate from measured flux ``flux`` at baseline ``r`` if at
+    baseline``r0`` measured flux is ``flux0``. Using gaussian model.
+    :param flux:
+    :param r:
+    :param r0:
+    :return:
+    """
+    pass
 
-def hdi_of_icdf(name, cred_mass=0.95, tol=1e-08, *args, **kwargs):
+
+def hdi_of_icdf(name, args, cred_mass=0.95, tol=1e-08):
     """
     :param name:
         Distribution with percent point function (inverse of CDF) defined as
@@ -50,7 +62,7 @@ def hdi_of_icdf(name, cred_mass=0.95, tol=1e-08, *args, **kwargs):
     :param kwargs:
         Keyword arguments to distribution ``name``.
     """
-    name = name(*args, **kwargs)
+    name = name(*args)
 
     def interval_width(low_tail_prob, name, cred_mass):
         return name.ppf(cred_mass + low_tail_prob) - name.ppf(low_tail_prob)
@@ -58,3 +70,16 @@ def hdi_of_icdf(name, cred_mass=0.95, tol=1e-08, *args, **kwargs):
     hdi_low_tail_prob = fmin(interval_width, 0, (name, cred_mass,), xtol=tol)
 
     return name.ppf(hdi_low_tail_prob), name.ppf(hdi_low_tail_prob + cred_mass)
+
+
+def get_ratio_hdi(m, n):
+    """
+    Get hdi for ratio ``m/n`` for binominal model.
+    :param m:
+        ``heads``.
+    :param n:
+        ``all``
+    :return:
+    """
+    hdi = hdi_of_icdf(sbeta, [m, n])
+    return float(hdi[0]), float(hdi[1])
