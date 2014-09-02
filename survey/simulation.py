@@ -129,7 +129,7 @@ class Simulation(object):
         else:
             std_logs = np.random.uniform(self.std_logs[0], self.std_logs[1])
         beta_e = np.random.uniform(self.beta_e[0], self.beta_e[1])
-        return mu_loga, std_loga, mu_logs, std_logs, beta_e
+        return mu_logs, std_logs, mu_loga, std_loga, beta_e
 
     def create_sample(self, parameters, size):
         """
@@ -144,12 +144,12 @@ class Simulation(object):
             Numpy arrays of size, full flux & axis ratios each of size =
             ``size``.
         """
-        mu_loga, std_loga, mu_logs, std_logs, beta_e = parameters
+        mu_logs, std_logs, mu_loga, std_loga, beta_e = parameters
         # Draw sample of size ``size`` from distributions with parameters
         loga = np.random.normal(mu_loga, std_loga, size=size)
         logs = np.random.normal(mu_logs, std_logs, size=size)
         e = np.random.beta(self.alpha_e, beta_e, size=size)
-        return np.exp(loga), np.exp(logs), e
+        return np.exp(logs), np.exp(loga), e
 
     def observe_sample(self, sample, baselines, pa, s_thr):
         """
@@ -166,12 +166,15 @@ class Simulation(object):
         :return:
             Detection fraction.
         """
-        a, s, e = sample
+        s, a, e = sample
+        print "a before " + str(a[::30])
         a *= mas_to_rad
+        print "a after" + str(a[::30])
+        print "s " + str(s[::30])
         n = len(baselines)
-        fluxes = flux(baselines, pa, s, mas_to_rad * a, e)
-        #print "Got fluxes " + str(fluxes)
-        #print "On baselines " + str(baselines)
+        fluxes = flux(baselines, pa, s, a, e)
+        print "Got fluxes " + str(fluxes[::30])
+        print "On baselines " + str(baselines[::30])
         n_det = len(np.where(fluxes > s_thr)[0])
         return float(n_det) / n
 
