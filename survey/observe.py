@@ -1,5 +1,5 @@
 import numpy as np
-from utils import flux, ed_to_uv
+from utils import flux, ed_to_uv, mas_to_rad
 from load_data import load_data, get_baselines_exper_averaged
 
 
@@ -14,7 +14,7 @@ class Survey(object):
             of sources.
         """
         # Baselines from ED to uv:
-        self.baselines = ed_to_uv(baselines)
+        self.baselines = ed_to_uv(np.asarray(baselines))
         self.pa = pa
 
     def observe(self, population, pa=None):
@@ -31,15 +31,17 @@ class Survey(object):
            Numpy array of fluxes [Jy].
         """
         # Use pa from argument if any
-        pa = pa or self.pa
+        if pa is None:
+            pa = self.pa
         # Generate population of sources
-        amps, std_x, e = population.generate(len(self.baselines))
+        population.generate(len(self.baselines))
+        amps, std_x, e = population.population
 
-        return flux(self.baselines, pa, amps, std_x, e)
+        return flux(self.baselines, pa, amps, mas_to_rad * std_x, e)
 
 
 class Population(object):
-    def __init__(self, mu_loga, std_loga, mu_logs, std_logs, alpha_e, beta_e):
+    def __init__(self, mu_logs, std_logs, mu_loga, std_loga, alpha_e, beta_e):
         """
         :param mu_loga:
             Mean of log(major axis) [log(mas)].
@@ -60,21 +62,60 @@ class Population(object):
         self.std_logs = std_logs
         self.alpha_e = alpha_e
         self.beta_e = beta_e
+        # Major axis [mas]
+        self.a = None
+        # Full fluxes [Jy]
+        self.s = None
+        # Minor-to-major axis ratios
+        self.e = None
 
     def generate(self, size):
+        """
+        Generate population with size ``size``.
+        :param size:
+            Size of population to generate.
+        """
         loga = np.random.normal(self.mu_loga, self.std_loga, size=size)
         logs = np.random.normal(self.mu_logs, self.std_logs, size=size)
         e = np.random.beta(self.alpha_e, self.beta_e, size=size)
-        return (np.exp(logs), np.exp(loga), e)
+        self.a = np.exp(loga)
+        self.s = np.exp(logs)
+        self.e = e
+
+    @property
+    def population(self):
+        return self.s, self.a, self.e
+
+    @population.deleter
+    def population(self):
+        """
+        Clear population of sources.
+        """
+        self.a = None
+        self.s = None
+        self.e = None
+
+    def projected_sizes(self, pa):
+        """
+        Get projected sizes of population of sources along given positional
+        angles ``pa``.
+        :param pa:
+            Array-like positional angles to calculate projections [rad].
+        :return:
+            Numpy array with projected sizes.
+        """
+        return self.a * np.sqrt((1. + np.tan(pa) ** 2.) / (1. +
+                                                           self.e ** (-2.) *
+                                                           np.tan(pa) ** 2.))
 
 
 if __name__ == '__main__':
     # Create 3 populations
-    population1 = Population(-0.5, 0.2, -0.5, 0.4, 5., 5.)
+    population1 = Population(-0.7, 0.2, -0.5, 0.4, 5., 5.)
     # As 1 but more compact and less full flux
     population2 = Population(-1.0, 0.2, -1.0, 0.4, 5., 5.)
     # As 1 but more alongated
-    population3 = Population(-0.5, 0.2, -0.5, 0.4, 5., 15.)
+    population3 = Population(-0.7, 0.2, -0.5, 0.4, 5., 15.)
 
     # Get baselines from real RA survey
     fname = '/home/ilya/Dropbox/survey/exp_bsl_st.txt'
@@ -89,6 +130,11 @@ if __name__ == '__main__':
     # Generate survey
     survey = Survey(baselines)
     # Observe 3 populations in this survey
+    # Get correlated fluxes
     flux1 = survey.observe(population1, pa=pa1)
     flux2 = survey.observe(population2, pa=pa2)
     flux3 = survey.observe(population3, pa=pa3)
+    # Get real projected sizes
+    pr_size1 = population1.projected_sizes(pa1)
+    pr_size2 = population1.projected_sizes(pa2)
+    pr_size3 = population1.projected_sizes(pa3)
