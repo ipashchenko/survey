@@ -31,10 +31,11 @@ def flux(r, pa, amp, std_x, e):
         Value of correlated flux at uv-point ()
     """
 
-    std_u = 1. / (std_x)
+    std_u = 1. / (2. * np.pi * std_x)
 
     return amp * np.exp(-(r ** 2. * (1. + e ** 2. * np.tan(pa) ** 2.)) /
                         (2. * std_u ** 2. * (1. + np.tan(pa) ** 2.)))
+
 
 def size(flux, r, flux0, r0=1.):
     """
