@@ -24,15 +24,15 @@ class Simulation(object):
             of axis ratio beta distribution.
         :param bsls:
             Array-like of baselines [ED].
-        :param std_logs (optional):
+        :param std_logs: (optional)
             2 values for min & max of uniform prior range on std of log(full
             flux) [log(Jy)]. If ``None`` then use half-cauchy prior.
-        :param std_loga (optional):
+        :param std_loga: (optional)
             2 values for min & max of uniform prior range on std of log(major
             axis) [log(mas)]. If ``None`` then use half-cauchy prior.
-        :param hc_scale (optional):
+        :param hc_scale: (optional)
             Scale parameter for half-cauchy prior.
-        :param alpha_e (optional):
+        :param alpha_e: (optional)
             Value of alpha-parameter of axis ratio beta distribution.
         """
         self.mu_loga = mu_loga
@@ -44,8 +44,33 @@ class Simulation(object):
         self.hc_scale = hc_scale
         self.bsls = np.asarray(bsls)
         self._p = []
+        # This is a random number generator that we can easily set the state
+        # of without affecting the numpy-wide generator
+        self._random = np.random.mtrand.RandomState()
 
-    def run(self, n_acc, fr_list, bsls_borders=None, s_thr=0.05):
+    @property
+    def random_state(self):
+        """
+        The state of the internal random number generator. In practice, it's
+        the result of calling ``get_state()`` on a
+        ``numpy.random.mtrand.RandomState`` object. You can try to set this
+        property but be warned that if you do this and it fails, it will do
+        so silently.
+        """
+        return self._random.get_state()
+
+    @random_state.setter # NOQA
+    def random_state(self, state):
+        """
+        Try to set the state of the random number generator but fail silently
+        if it doesn't work. Don't say I didn't warn you...
+        """
+        try:
+           self._random.set_state(state)
+        except:
+           pass
+
+    def run(self, n_acc, fr_list, bsls_borders=None, s_thr=0.05, rstate0=None):
         """
         Run simulation till ``n_acc`` parameters are accepted.
         :param n_acc:
@@ -60,6 +85,9 @@ class Simulation(object):
             bsls_borders[n]]. Length must be ``len(fr_list) + 1``.
         :param s_thr:
             Flux detection threshold [Jy].
+        :param rstate0: (optional)
+            The state of the random number generator.
+            See the :attr:`Sampler.random_state` property for details.
 
         :notes:
             Size of samples used to count acceptance fractions is determined by
@@ -71,11 +99,13 @@ class Simulation(object):
             sources that give detection fractions equal to observed ones within
             specified tolerance.
         """
-        np.random.seed(123)
         # Assertions
         assert(len(fr_list) == len(bsls_borders) - 1)
         # Initialize counting variable
         n = 0
+
+        if rstate0 is None:
+            rstate0 = self.random_state
 
         # Partition baselines in ranges
         bsls_partitioned = list()
@@ -85,6 +115,8 @@ class Simulation(object):
         print bsls_partitioned
         print [len(part) for part in bsls_partitioned]
         while n <= n_acc:
+            # Use custom generator for pa generation
+            self.random_state = rstate0
             print "Accepted up to now : " + str(self.p)
             params = self.draw_parameters()
             print "Trying parameters " + str(params)
@@ -93,7 +125,8 @@ class Simulation(object):
 
                 n_ = len(baselines)
                 # Simulate ``n_`` random positional angles for baselines
-                pa = np.random.uniform(0., np.pi, size=n_)
+                # Use the same seed to get the same pa each iteration
+                pa = self._random.uniform(0., np.pi, size=n_)
                 baselines = ed_to_uv(baselines)
                 sample = self.create_sample(params, size=n_)
                 det_fr = self.observe_sample(sample, baselines, pa, s_thr)
@@ -202,7 +235,7 @@ if __name__ == '__main__':
     print "Using " + fname
     bsls = get_baselines_exper_averaged(fname)
 
-    bsls_borders = [5., 10., 17., 30.]
+    bsls_borders = [2., 5., 10., 17., 30.]
 
     print "Using " + str(bsls_borders)
     fractions = get_detection_fraction_in_baseline_range(fname, bsls_borders)
