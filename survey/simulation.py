@@ -1,3 +1,4 @@
+import sys
 import numpy as np
 #from numpy.random import RandomState
 from scipy.stats import halfcauchy
@@ -192,9 +193,18 @@ class Simulation(object):
 
 if __name__ == '__main__':
 
-    fname = '/home/ilya/Dropbox/survey/exp_bsl_st.txt'
+    if sys.argv[1] == 'c':
+        fname = '/home/ilya/Dropbox/survey/exp_bsl_st_c.txt'
+    elif sys.argv[1] == 'l':
+        fname = '/home/ilya/Dropbox/survey/exp_bsl_st_l.txt'
+    else:
+        sys.exit('USE c OR l!')
+    print "Using " + fname
     bsls = get_baselines_exper_averaged(fname)
-    bsls_borders = [5., 10., 20., 30.]
+
+    bsls_borders = [5., 10., 17., 30.]
+
+    print "Using " + str(bsls_borders)
     fractions = get_detection_fraction_in_baseline_range(fname, bsls_borders)
     frac_list = list()
     for frac in fractions:
@@ -205,4 +215,3 @@ if __name__ == '__main__':
 
     simulation = Simulation([-2., -0.], [-3., 0.], [1., 25.], bsls)
     simulation.run(100, frac_list, bsls_borders=bsls_borders, s_thr=0.03)
-
