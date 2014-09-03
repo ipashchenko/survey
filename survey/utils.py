@@ -73,7 +73,7 @@ def hdi_of_icdf(name, args, cred_mass=0.95, tol=1e-08):
     return name.ppf(hdi_low_tail_prob), name.ppf(hdi_low_tail_prob + cred_mass)
 
 
-def get_ratio_hdi(m, n):
+def get_ratio_hdi(m, n, cred_mass=0.95):
     """
     Get hdi for ratio ``m/n`` for binominal model.
     :param m:
@@ -82,5 +82,5 @@ def get_ratio_hdi(m, n):
         ``all``
     :return:
     """
-    hdi = hdi_of_icdf(sbeta, [m, n])
+    hdi = hdi_of_icdf(sbeta, [m, n], cred_mass=cred_mass)
     return float(hdi[0]), float(hdi[1])
