@@ -82,5 +82,6 @@ def get_ratio_hdi(m, n, cred_mass=0.95):
         ``all``
     :return:
     """
-    hdi = hdi_of_icdf(sbeta, [m, n], cred_mass=cred_mass)
+    assert(n >= m)
+    hdi = hdi_of_icdf(sbeta, [m + 1., n - m + 1.], cred_mass=cred_mass)
     return float(hdi[0]), float(hdi[1])
