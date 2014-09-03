@@ -72,10 +72,17 @@ def get_detection_fraction_in_baseline_range(fname, bsls_borders):
 
 if __name__ == '__main__':
 
-    fname = '/home/ilya/Dropbox/survey/exp_bsl_st.txt'
-    data = load_data(fname)
-    summary = get_unique_experiments_dict(data)
-    mean_baselines = get_baselines_exper_averaged(fname)
-    det_fr = get_detection_fraction(data)
-    fractions = get_detection_fraction_in_baseline_range(fname, [0, 10., 20.,
-                                                                 30.])
+    fname_c = '/home/ilya/Dropbox/survey/exp_bsl_st_c.txt'
+    fname_l = '/home/ilya/Dropbox/survey/exp_bsl_st_l.txt'
+    data_c = load_data(fname_c)
+    data_l = load_data(fname_l)
+    summary_c = get_unique_experiments_dict(data_c)
+    summary_l = get_unique_experiments_dict(data_l)
+    mean_baselines_c = get_baselines_exper_averaged(fname_c)
+    mean_baselines_l = get_baselines_exper_averaged(fname_l)
+    det_fr_c = get_detection_fraction(data_c)
+    det_fr_l = get_detection_fraction(data_l)
+    fractions_c = get_detection_fraction_in_baseline_range(fname_c, [5, 10.,
+                                                                     17., 30.])
+    fractions_l = get_detection_fraction_in_baseline_range(fname_l, [5, 10.,
+                                                                     17., 30.])
