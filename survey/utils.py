@@ -10,6 +10,40 @@ rad_to_mas = 206.3 * 10 ** 6
 def ed_to_uv(r, lambda_cm=18.):
     return r * 12742. * 100000. / lambda_cm
 
+def partition_baselines(bsls, s_thrs, borders):
+    """
+    Function that partition array ``bsls`` on ``len(borders) - 1`` parts and
+    returns list of tuples (bsls_partitioned, s_thrs_partitioned,)
+    :param bsls:
+    :param s_thrs:
+    :param borders:
+    :return:
+    """
+    bsls_partitioned = list()
+    s_thrs_partitioned = list()
+    for i in range(len(borders) - 1):
+        indxs = np.where(np.logical_and(bsls > borders[i],
+                                        bsls < borders[i + 1]))[0]
+        bsls_partitioned.append(bsls[indxs])
+        s_thrs_partitioned.append(s_thrs[indxs])
+    return zip(bsls_partitioned, s_thrs_partitioned)
+
+
+def partition_baselines_(bsls_s_thrs, borders):
+    """
+    Function that partition 2d numpy array ``bsls_s_thrs`` based on ``borders``
+    baseline ranges.
+    :param bsls_s_thrs:
+    :param borders:
+    :return:
+    """
+    bsls_s_thrs_partitioned = list()
+    for i in range(len(borders) - 1):
+        indxs = np.where(np.logical_and(bsls_s_thrs[:, 0] > borders[i],
+                                        bsls_s_thrs[:, 0] < borders[i + 1]))[0]
+        bsls_s_thrs_partitioned.append(bsls_s_thrs[indxs])
+    return bsls_s_thrs_partitioned
+
 
 def flux(r, pa, amp, std_x, e):
     """
