@@ -97,12 +97,12 @@ class Population(object):
 
     def projected_sizes(self, pa):
         """
-        Get projected sizes of population of sources along given positional
+        Get real projected sizes of population of sources along given positional
         angles ``pa``.
         :param pa:
             Array-like positional angles to calculate projections [rad].
         :return:
-            Numpy array with projected sizes.
+            Numpy array with real projected sizes.
         """
         return self.a * np.sqrt((1. + np.tan(pa) ** 2.) / (1. +
                                                            self.e ** (-2.) *
