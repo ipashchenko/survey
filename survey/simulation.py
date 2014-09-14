@@ -2,13 +2,14 @@ import sys
 import numpy as np
 #from numpy.random import RandomState
 from scipy.stats import halfcauchy
-from utils import flux, mas_to_rad, rad_to_mas, ed_to_uv, get_ratio_hdi
+from utils import flux, mas_to_rad, rad_to_mas, ed_to_uv, get_ratio_hdi,\
+    partition_baselines_
 from load_data import get_baselines_exper_averaged,\
-    get_detection_fraction_in_baseline_range
+    get_detection_fraction_in_baseline_range, get_baselines_s_threshold
 
 
 class Simulation(object):
-    def __init__(self, mu_logs, mu_loga, beta_e, bsls, std_loga=None,
+    def __init__(self, mu_logs, mu_loga, beta_e, bsls_s_thrs, std_loga=None,
                  std_logs=None, hc_scale=0.2, alpha_e=5.0):
         """
         Class that implements simulation of RA survey.
@@ -22,8 +23,8 @@ class Simulation(object):
         :param beta_e:
             2 values for min & max of ``beta_e`` prior range of beta-parameter
             of axis ratio beta distribution.
-        :param bsls:
-            Array-like of baselines [ED].
+        :param bsls_s_thrs:
+            Array-like of (baseline, threshold flux) [ED, Jy].
         :param std_logs: (optional)
             2 values for min & max of uniform prior range on std of log(full
             flux) [log(Jy)]. If ``None`` then use half-cauchy prior.
@@ -42,7 +43,7 @@ class Simulation(object):
         self.beta_e = beta_e
         self.alpha_e = alpha_e
         self.hc_scale = hc_scale
-        self.bsls = np.asarray(bsls)
+        self.bsls_s_thrs = np.atleast_2d(bsls_s_thrs)
         self._p = []
         # This is a random number generator that we can easily set the state
         # of without affecting the numpy-wide generator
@@ -59,18 +60,17 @@ class Simulation(object):
         """
         return self._random.get_state()
 
-    @random_state.setter # NOQA
+    @random_state.setter
     def random_state(self, state):
         """
-        Try to set the state of the random number generator but fail silently
-        if it doesn't work. Don't say I didn't warn you...
+        Set the state of the random number generator.
         """
         try:
            self._random.set_state(state)
         except:
            pass
 
-    def run(self, n_acc, fr_list, bsls_borders=None, s_thr=0.05, rstate0=None):
+    def run(self, n_acc, fr_list, bsls_borders=None, rstate0=None):
         """
         Run simulation till ``n_acc`` parameters are accepted.
         :param n_acc:
@@ -83,8 +83,6 @@ class Simulation(object):
             compared in intervals [bsls_borders[0], bsls_borders[1]],
             [bsls_borders[1], bsls_borders[2]], ..., [bsls_borders[n-1],
             bsls_borders[n]]. Length must be ``len(fr_list) + 1``.
-        :param s_thr:
-            Flux detection threshold [Jy].
         :param rstate0: (optional)
             The state of the random number generator.
             See the :attr:`Sampler.random_state` property for details.
@@ -92,8 +90,6 @@ class Simulation(object):
         :notes:
             Size of samples used to count acceptance fractions is determined by
             number of baselines in each baseline interval.
-
-        :return:
             List of n lists of parameters [``mu_loga``, ``std_loga``,
             ``mu_logs``, ``std_logs``, ``beta_e``] that generate samples of
             sources that give detection fractions equal to observed ones within
@@ -108,12 +104,13 @@ class Simulation(object):
             rstate0 = self.random_state
 
         # Partition baselines in ranges
-        bsls_partitioned = list()
-        for i in range(len(bsls_borders) - 1):
-            bsls_partitioned.append(self.bsls[np.where((self.bsls > bsls_borders[i]) &
-                                             (self.bsls < bsls_borders[i + 1]))[0]])
-        print bsls_partitioned
-        print [len(part) for part in bsls_partitioned]
+        bsls_s_thrs_partitioned = partition_baselines_(self.bsls_s_thrs)
+        # bsls_partitioned = list()
+        # for i in range(len(bsls_borders) - 1):
+        #     bsls_partitioned.append(self.bsls[np.where((self.bsls > bsls_borders[i]) &
+        #                                      (self.bsls < bsls_borders[i + 1]))[0]])
+        # print bsls_partitioned
+        # print [len(part) for part in bsls_partitioned]
         while n <= n_acc:
             # Use custom generator for pa generation
             self.random_state = rstate0
@@ -121,15 +118,15 @@ class Simulation(object):
             params = self.draw_parameters()
             print "Trying parameters " + str(params)
             # For each range of baselines check summary statistics
-            for i, baselines in enumerate(bsls_partitioned):
+            for i, (baselines, s_thrs,) in enumerate(bsls_s_thrs_partitioned):
 
                 n_ = len(baselines)
                 # Simulate ``n_`` random positional angles for baselines
-                # Use the same seed to get the same pa each iteration
+                # Use the same seed to get the same pa at each iteration
                 pa = self._random.uniform(0., np.pi, size=n_)
                 baselines = ed_to_uv(baselines)
                 sample = self.create_sample(params, size=n_)
-                det_fr = self.observe_sample(sample, baselines, pa, s_thr)
+                det_fr = self.observe_sample(sample, baselines, pa, s_thrs)
                 print "Got detection fraction " + str(det_fr)
                 # If fail to get right fraction in this range then go to next
                 # loop of while
@@ -185,7 +182,7 @@ class Simulation(object):
         e = np.random.beta(self.alpha_e, beta_e, size=size)
         return np.exp(logs), np.exp(loga), e
 
-    def observe_sample(self, sample, baselines, pa, s_thr):
+    def observe_sample(self, sample, baselines, pa, s_thrs):
         """
         Test ``sample`` of sources for detection fraction on ``baselines`` with
         positional angles ``pa``.
@@ -196,7 +193,7 @@ class Simulation(object):
         :param pa:
             Numpy array of baseline PA [rad].
         :param s_thr:
-            Threshold detection flux on each baseline [Jy].
+            Numpy array of threshold detection flux on each baseline [Jy].
         :return:
             Detection fraction.
         """
@@ -209,7 +206,7 @@ class Simulation(object):
         fluxes = flux(baselines, pa, s, a, e)
         print "Got fluxes " + str(fluxes[::30])
         print "On baselines " + str(baselines[::30])
-        n_det = len(np.where(fluxes > s_thr)[0])
+        n_det = len(np.where(fluxes > s_thrs)[0])
         return float(n_det) / n
 
     def reset(self):
@@ -233,7 +230,8 @@ if __name__ == '__main__':
     else:
         sys.exit('USE c OR l!')
     print "Using " + fname
-    bsls = get_baselines_exper_averaged(fname)
+    #bsls = get_baselines_exper_averaged(fname)
+    bsls, s_thrs = zip(*get_baselines_s_threshold(sys.argv[1]))
 
     bsls_borders = [2., 5., 10., 17., 30.]
 
