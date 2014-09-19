@@ -150,24 +150,32 @@ def s_thr_from_obs_row(row, raise_ra=True, n_q=0.637, dnu=16. * 10 ** 6, n=2):
     try:
         SEFD_rt1 = SEFD_dict[rt1][band.upper()][polar[0]]
     except KeyError:
-        raise Exception("There's no entry for " + rt1 + " in SEFD dictionary!")
+        #raise Exception("There's no entry for " + rt1 + " in SEFD dictionary!")
+        return None
     except TypeError:
         raise Exception("There's no SEFD data for " + rt1 + " !")
     try:
         SEFD_rt2 = SEFD_dict[rt2][band.upper()][polar[1]]
     except KeyError:
-        raise Exception("There's no entry for " + rt2 + " in SEFD dictionary!")
+        #raise Exception("There's no entry for " + rt2 + " in SEFD dictionary!")
+        return None
     except TypeError:
         raise Exception("There's no SEFD data for " + rt2 + " !")
 
-    return (1. / n_q) * math.sqrt((SEFD_rt1 * SEFD_rt2) / (n * dnu *
-                                                           row['solint']))
+    try:
+        result = (1. / n_q) * math.sqrt((SEFD_rt1 * SEFD_rt2) / (n * dnu *
+                                                                 row['solint']))
+    except TypeError:
+        return None
+
+    return result
+
 
 # TODO: Execute query with asc.db.DB class before fetching results.
-def get_baselines_s_threshold(band):
+def get_baselines_s_threshold(band, struct_array=None):
     """
-    Returns numpy 2D-arrays of (baseline, s_thr), where s_thr is determined by
-    integration time and ground station.
+    Returns numpy 2D-arrays of (baseline, s_thr, stutus), where s_thr is
+    determined by integration time and ground station.
     :param fname:
     :return:
 
@@ -180,7 +188,8 @@ def get_baselines_s_threshold(band):
     """
     if band not in ('k', 'c', 'l', 'p',):
         raise Exception("band must be k, c, l or p!")
-    struct_array = get_array_from_dbtable()
+    if struct_array is None:
+        struct_array = get_array_from_dbtable()
     # Choose only data with parallel hands
     struct_array = struct_array[np.where(np.logical_or(struct_array['polar'] ==
                                                        'LL',
@@ -215,9 +224,12 @@ def get_baselines_s_threshold(band):
             for obs_ in obs_detections:
                 s_thr = s_thr_from_obs_row(obs_, band)
                 s_thrs.append(s_thr)
+            print "S_thr for experiment ", s_thrs
             # Choose baseline with the highest threshold flux among detections
             index = s_thrs.index(max(s_thrs))
+            # If all s_thr are None then nothing will go to result (see append)
             observation = obs_detections[index]
+            status = 'y'
 
         # If experiment doesn't have detections
         else:
@@ -226,15 +238,29 @@ def get_baselines_s_threshold(band):
             for obs_ in obs_nondetections:
                 s_thr = s_thr_from_obs_row(obs_, band)
                 s_thrs.append(s_thr)
+            print "S_thr for experiment ", s_thrs
             # Choose observation with the lowest threshold flux among
             # nondetections
-            index = s_thrs.index(min(s_thrs))
+            try:
+                index = s_thrs.index(min(s_thr for s_thr in s_thrs if s_thr is
+                                         not None))
+            # if all s_thr are None then use any (first)
+            except ValueError:
+                index = 0
             observation = obs_nondetections[index]
+            status = 'n'
 
-        results.append([observation['base_ed'],
-                        s_thr_from_obs_row(observation)])
+        print observation['st1'], observation['st2'], observation['base_ed'],\
+            s_thr_from_obs_row(observation), status
+        s_thr_result = s_thr_from_obs_row((observation))
+        if s_thr_result is not None:
+            results.append([observation['base_ed'], s_thr_result, status])
 
-        return results
+    dtype = [('bl', '>f4'), ('s_thr', '>f4'), ('status', '|S1')]
+    output = np.zeros(len(results), dtype=dtype)
+    output['bl'], output['s_thr'], output['status'] = zip(*results)
+
+    return output
 
 
 def get_baselines_exper_averaged(fname):
@@ -287,6 +313,21 @@ def get_detection_fraction_in_baseline_range(fname, bsls_borders):
                        (vfloat(adata[:, 1]) < bsls_borders[i + 1]))[0]]
         n_det, n_all, frac = get_detection_fraction(adata_)
         fractions.append([get_ratio_hdi(n_det, n_all), frac])
+    return fractions
+
+
+def get_detection_fractions_in_baseline_ranges(bsls_s_thrs_status,
+                                               bsls_borders):
+    array_ = bsls_s_thrs_status
+    fractions = list()
+    for i in range(len(bsls_borders) - 1):
+        array__ = array_[np.where(np.logical_and(vfloat(array_['bl']) >
+                                                 bsls_borders[i],
+                                                 vfloat(array_['bl']) <
+                                                 bsls_borders[i + 1]))]
+        n_det = list(array__['status']).count('y')
+        n_all = len(array__)
+        fractions.append(get_ratio_hdi(n_det, n_all,cred_mass=0.5))
     return fractions
 
 
