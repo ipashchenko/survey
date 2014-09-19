@@ -39,8 +39,8 @@ def partition_baselines_(bsls_s_thrs, borders):
     """
     bsls_s_thrs_partitioned = list()
     for i in range(len(borders) - 1):
-        indxs = np.where(np.logical_and(bsls_s_thrs[:, 0] > borders[i],
-                                        bsls_s_thrs[:, 0] < borders[i + 1]))[0]
+        indxs = np.where(np.logical_and(bsls_s_thrs['bl'] > borders[i],
+                                        bsls_s_thrs['bl'] < borders[i + 1]))[0]
         bsls_s_thrs_partitioned.append(bsls_s_thrs[indxs])
     return bsls_s_thrs_partitioned
 
