@@ -1,16 +1,15 @@
 import sys
 import numpy as np
-#from numpy.random import RandomState
 from scipy.stats import halfcauchy
 from utils import flux, mas_to_rad, rad_to_mas, ed_to_uv, get_ratio_hdi,\
     partition_baselines_
-from load_data import get_baselines_exper_averaged,\
-    get_detection_fraction_in_baseline_range, get_baselines_s_threshold
+from load_data import get_baselines_s_threshold, \
+    get_detection_fractions_in_baseline_ranges
 
 
 class Simulation(object):
-    def __init__(self, mu_logs, mu_loga, beta_e, bsls_s_thrs, std_loga=None,
-                 std_logs=None, hc_scale=0.2, alpha_e=5.0):
+    def __init__(self, mu_logs, mu_loga, beta_e, bsls_s_thrs_statuses,
+                 std_loga=None, std_logs=None, hc_scale=0.2, alpha_e=5.0):
         """
         Class that implements simulation of RA survey.
 
@@ -23,8 +22,8 @@ class Simulation(object):
         :param beta_e:
             2 values for min & max of ``beta_e`` prior range of beta-parameter
             of axis ratio beta distribution.
-        :param bsls_s_thrs:
-            Array-like of (baseline, threshold flux) [ED, Jy].
+        :param bsls_s_thrs_statuses:
+            Array-like of (baseline, threshold flux, status) [ED, Jy, y/n].
         :param std_logs: (optional)
             2 values for min & max of uniform prior range on std of log(full
             flux) [log(Jy)]. If ``None`` then use half-cauchy prior.
@@ -43,7 +42,7 @@ class Simulation(object):
         self.beta_e = beta_e
         self.alpha_e = alpha_e
         self.hc_scale = hc_scale
-        self.bsls_s_thrs = np.atleast_2d(bsls_s_thrs)
+        self.bsls_s_thrs_statuses = bsls_s_thrs_statuses
         self._p = []
         # This is a random number generator that we can easily set the state
         # of without affecting the numpy-wide generator
@@ -70,14 +69,12 @@ class Simulation(object):
         except:
            pass
 
-    def run(self, n_acc, fr_list, bsls_borders=None, rstate0=None):
+    # TODO: don't need to supply fr_list
+    def run(self, n_acc, bsls_borders=None, rstate0=None):
         """
         Run simulation till ``n_acc`` parameters are accepted.
         :param n_acc:
             Accepted number of parameters to stop simulation.
-        :param fr_list
-            List of lists of observed fractions. Each list contains low and high
-            point of corresponding HDI interval.
         :param bsls_borders:
             Array-like of borders for baseline ranges. Fractions will be
             compared in intervals [bsls_borders[0], bsls_borders[1]],
@@ -96,6 +93,8 @@ class Simulation(object):
             specified tolerance.
         """
         # Assertions
+        fr_list = get_detection_fractions_in_baseline_ranges(self.bsls_s_thrs_statuses,
+                                                             bsls_borders)
         assert(len(fr_list) == len(bsls_borders) - 1)
         # Initialize counting variable
         n = 0
@@ -104,13 +103,8 @@ class Simulation(object):
             rstate0 = self.random_state
 
         # Partition baselines in ranges
-        bsls_s_thrs_partitioned = partition_baselines_(self.bsls_s_thrs)
-        # bsls_partitioned = list()
-        # for i in range(len(bsls_borders) - 1):
-        #     bsls_partitioned.append(self.bsls[np.where((self.bsls > bsls_borders[i]) &
-        #                                      (self.bsls < bsls_borders[i + 1]))[0]])
-        # print bsls_partitioned
-        # print [len(part) for part in bsls_partitioned]
+        bsls_s_thrs_partitioned = partition_baselines_(self.bsls_s_thrs_statuses[['bl', 's_thr']],
+                                                       bsls_borders)
         while n <= n_acc:
             # Use custom generator for pa generation
             self.random_state = rstate0
@@ -118,13 +112,14 @@ class Simulation(object):
             params = self.draw_parameters()
             print "Trying parameters " + str(params)
             # For each range of baselines check summary statistics
-            for i, (baselines, s_thrs,) in enumerate(bsls_s_thrs_partitioned):
+            for i, bsls_s_thrs in enumerate(bsls_s_thrs_partitioned):
 
-                n_ = len(baselines)
+                n_ = len(bsls_s_thrs)
                 # Simulate ``n_`` random positional angles for baselines
                 # Use the same seed to get the same pa at each iteration
                 pa = self._random.uniform(0., np.pi, size=n_)
-                baselines = ed_to_uv(baselines)
+                baselines = ed_to_uv(bsls_s_thrs['bl'])
+                s_thrs = bsls_s_thrs['s_thr']
                 sample = self.create_sample(params, size=n_)
                 det_fr = self.observe_sample(sample, baselines, pa, s_thrs)
                 print "Got detection fraction " + str(det_fr)
@@ -206,7 +201,7 @@ class Simulation(object):
         fluxes = flux(baselines, pa, s, a, e)
         print "Got fluxes " + str(fluxes[::30])
         print "On baselines " + str(baselines[::30])
-        n_det = len(np.where(fluxes > s_thrs)[0])
+        n_det = len(np.where(fluxes > 5. * s_thrs)[0])
         return float(n_det) / n
 
     def reset(self):
@@ -223,26 +218,19 @@ class Simulation(object):
 
 if __name__ == '__main__':
 
-    if sys.argv[1] == 'c':
-        fname = '/home/ilya/Dropbox/survey/exp_bsl_st_c.txt'
-    elif sys.argv[1] == 'l':
-        fname = '/home/ilya/Dropbox/survey/exp_bsl_st_l.txt'
-    else:
-        sys.exit('USE c OR l!')
-    print "Using " + fname
-    #bsls = get_baselines_exper_averaged(fname)
-    bsls, s_thrs = zip(*get_baselines_s_threshold(sys.argv[1]))
+    #if sys.argv[1] == 'c':
+    #    band = 'c'
+    #elif sys.argv[1] == 'l':
+    #    band = 'l'
+    #else:
+#        sys.exit('USE c OR l!')
+    band = 'c'
+    print "Using " + band + "-band"
+    bsls_s_thrs_statuses = get_baselines_s_threshold(band)
 
     bsls_borders = [2., 5., 10., 17., 30.]
 
     print "Using " + str(bsls_borders)
-    fractions = get_detection_fraction_in_baseline_range(fname, bsls_borders)
-    frac_list = list()
-    for frac in fractions:
-        hdi0, hdi1 = get_ratio_hdi(frac[0], frac[1])
-        frac_list.append([hdi0, hdi1])
-    print "Using fractions :"
-    print frac_list
-
-    simulation = Simulation([-2., -0.], [-3., 0.], [1., 25.], bsls)
-    simulation.run(100, frac_list, bsls_borders=bsls_borders, s_thr=0.03)
+    simulation = Simulation([-4., -0.], [-6., 0.], [1., 35.],
+                            bsls_s_thrs_statuses)
+    simulation.run(100, bsls_borders=bsls_borders)
