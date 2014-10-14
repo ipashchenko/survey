@@ -1,6 +1,6 @@
 import sys
 import numpy as np
-from scipy.stats import halfcauchy
+from scipy.stats import halfcauchy, halfnorm
 from utils import flux, mas_to_rad, rad_to_mas, ed_to_uv, get_ratio_hdi,\
     partition_baselines_
 from load_data import get_baselines_s_threshold, \
@@ -44,6 +44,8 @@ class Simulation(object):
         self.hc_scale = hc_scale
         self.bsls_s_thrs_statuses = bsls_s_thrs_statuses
         self._p = []
+        self._summary = []
+        self._data_sum = None
         # This is a random number generator that we can easily set the state
         # of without affecting the numpy-wide generator
         self._random = np.random.mtrand.RandomState()
@@ -92,9 +94,12 @@ class Simulation(object):
             sources that give detection fractions equal to observed ones within
             specified tolerance.
         """
-        # Assertions
+        # Calculate detection fractions in given baseline ranges
         fr_list = get_detection_fractions_in_baseline_ranges(self.bsls_s_thrs_statuses,
                                                              bsls_borders)
+        # Save detection fractions as data summary statistics
+        self._data_sum = fr_list
+        # Assertion on consistency
         assert(len(fr_list) == len(bsls_borders) - 1)
         # Initialize counting variable
         n = 0
@@ -106,11 +111,12 @@ class Simulation(object):
         bsls_s_thrs_partitioned = partition_baselines_(self.bsls_s_thrs_statuses[['bl', 's_thr']],
                                                        bsls_borders)
         while n <= n_acc:
-            # Use custom generator for pa generation
+            # Use custom generator for pa generation to get the same random pa's
             self.random_state = rstate0
-            print "Accepted up to now : " + str(self.p)
             params = self.draw_parameters()
-            print "Trying parameters " + str(params)
+            #print "Trying parameters " + str(params)
+            # Create list to collect summary statistics
+            summary_statistics = []
             # For each range of baselines check summary statistics
             for i, bsls_s_thrs in enumerate(bsls_s_thrs_partitioned):
 
@@ -122,14 +128,15 @@ class Simulation(object):
                 s_thrs = bsls_s_thrs['s_thr']
                 sample = self.create_sample(params, size=n_)
                 det_fr = self.observe_sample(sample, baselines, pa, s_thrs)
-                print "Got detection fraction " + str(det_fr)
+                summary_statistics.append(det_fr)
+                #print "Got detection fraction " + str(det_fr)
                 # If fail to get right fraction in this range then go to next
                 # loop of while
                 if (det_fr < fr_list[i][0]) or (det_fr > fr_list[i][1]):
                     # If we got stuck here - then reject current parameters and
                     # got to next ``while``-loop
-                    print str(det_fr) + " not in HDI : " + str(fr_list[i])
-                    print "Rejecting parameter!"
+                    #print str(det_fr) + " not in HDI : " + str(fr_list[i])
+                    #print "Rejecting parameter!"
                     break
             # This ``else`` is part of ``for``-loop
             else:
@@ -139,6 +146,8 @@ class Simulation(object):
                 print "This parameter is accepted!"
                 n += 1
                 self._p.append(params)
+                print "Accepted up to now : " + str(self.p)
+                self._summary.append(summary_statistics)
 
     def draw_parameters(self):
         """
@@ -146,12 +155,16 @@ class Simulation(object):
         """
         mu_loga = np.random.uniform(self.mu_loga[0], self.mu_loga[1])
         if self.std_loga is None:
-            std_loga = float(halfcauchy.rvs(scale=self.hc_scale, size=1))
+            #std_loga = float(halfcauchy.rvs(scale=self.hc_scale, size=1))
+            #std_loga = float(np.random.uniform(0, 1))
+            std_loga = float(halfnorm.rvs(scale=self.hc_scale, size=1))
         else:
             std_loga = np.random.uniform(self.std_loga[0], self.std_loga[1])
         mu_logs = np.random.uniform(self.mu_logs[0], self.mu_logs[1])
         if self.std_logs is None:
-            std_logs = float(halfcauchy.rvs(scale=self.hc_scale, size=1))
+            #std_logs = float(halfcauchy.rvs(scale=self.hc_scale, size=1))
+            #std_logs = float(np.random.uniform(0, 1))
+            std_logs = float(halfnorm.rvs(scale=self.hc_scale, size=1))
         else:
             std_logs = np.random.uniform(self.std_logs[0], self.std_logs[1])
         beta_e = np.random.uniform(self.beta_e[0], self.beta_e[1])
@@ -193,14 +206,14 @@ class Simulation(object):
             Detection fraction.
         """
         s, a, e = sample
-        print "a before " + str(a[::30])
+        #print "a before " + str(a[::30])
         a *= mas_to_rad
-        print "a after" + str(a[::30])
-        print "s " + str(s[::30])
+        #print "a after" + str(a[::30])
+        #print "s " + str(s[::30])
         n = len(baselines)
         fluxes = flux(baselines, pa, s, a, e)
-        print "Got fluxes " + str(fluxes[::30])
-        print "On baselines " + str(baselines[::30])
+        #print "Got fluxes " + str(fluxes[::30])
+        #print "On baselines " + str(baselines[::30])
         n_det = len(np.where(fluxes > 5. * s_thrs)[0])
         return float(n_det) / n
 
@@ -211,20 +224,19 @@ class Simulation(object):
     def p(self):
         return np.atleast_2d(self._p)
 
-    @p.setter
-    def p(self, value):
-        self._p = value
+    @property
+    def summary(self):
+        return np.atleast_2d(self._summary)
 
 
 if __name__ == '__main__':
 
-    #if sys.argv[1] == 'c':
-    #    band = 'c'
-    #elif sys.argv[1] == 'l':
-    #    band = 'l'
-    #else:
-#        sys.exit('USE c OR l!')
-    band = 'c'
+    if sys.argv[1] == 'c':
+        band = 'c'
+    elif sys.argv[1] == 'l':
+        band = 'l'
+    else:
+        sys.exit('USE c OR l!')
     print "Using " + band + "-band"
     bsls_s_thrs_statuses = get_baselines_s_threshold(band)
 
@@ -233,4 +245,4 @@ if __name__ == '__main__':
     print "Using " + str(bsls_borders)
     simulation = Simulation([-4., -0.], [-6., 0.], [1., 35.],
                             bsls_s_thrs_statuses)
-    simulation.run(100, bsls_borders=bsls_borders)
+    simulation.run(500, bsls_borders=bsls_borders)
