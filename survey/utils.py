@@ -1,3 +1,4 @@
+import re
 import numpy as np
 from scipy.optimize import fmin
 from scipy.stats import beta as sbeta
@@ -119,3 +120,79 @@ def get_ratio_hdi(m, n, cred_mass=0.95):
     assert(n >= m)
     hdi = hdi_of_icdf(sbeta, [m + 1., n - m + 1.], cred_mass=cred_mass)
     return float(hdi[0]), float(hdi[1])
+
+
+def j2000_from_racat(fname):
+
+    dict_ = dict()
+
+    file_ = open(fname, 'U')
+    lines = file_.readlines()
+    for line in lines:
+        if line.strip().startswith('!'):
+            continue
+        try:
+
+            name = re.findall(r".+source='(\S+)'", line)[0]
+            print name
+            j2000 = line.strip().split()[1].strip(",'")
+            print j2000
+            dict_.update({str(name): str(j2000)})
+        except IndexError:
+            pass
+
+    return dict_
+
+
+def cross_correlate_ra_with_vsop(names, vsop_cores_table, racat):
+    """
+    Get fluxes of VSOP cores for sources observed with RA.
+
+    :param names:
+        Iterable of RA DB names (B1950).
+    :param vsop_cores_table:
+        Text file with data from VSOP.
+    :param racat:
+        Radioastron catalogue.
+    :return:
+        Fluxes of cores (VSOP 5GHz data) for RA DB sources that were observed
+        with VSOP.
+    """
+    names = set(names)
+    file_ = open(vsop_cores_table, 'U')
+    lines = file_.readlines()
+    fluxes = list()
+    for name in names:
+        print "Searching for " + name
+        j2000 = find_j2000_from_racat(name, racat)
+        if j2000 is not None:
+            for line in lines:
+                if j2000 in line:
+                    flux = line.strip().split()[1]
+                    print "Source core " + name + " got flux " + str(flux)
+                    fluxes.append(float(flux))
+    return fluxes
+
+
+def find_j2000_from_racat(name, racat):
+    """
+    Function that returns J2000 name from RA catalogue given B1950 or
+    alternative name.
+
+    :param name:
+        B1950 or alternative (like 3C279) name.
+    :return:
+        J2000 name.
+    """
+    file_ = open(racat, 'U')
+    lines = file_.readlines()
+    j2000 = None
+    for line in lines:
+        if name in line:
+            j2000 = line.strip().split()[1].strip(",'")
+
+    try:
+        return j2000
+    except UnboundLocalError:
+        print "Can't find J2000 for " + name
+        return None
