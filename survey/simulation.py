@@ -1,4 +1,5 @@
 import sys
+import math
 import numpy as np
 from scipy.stats import halfcauchy, halfnorm
 from utils import flux, mas_to_rad, rad_to_mas, ed_to_uv, get_ratio_hdi,\
@@ -9,7 +10,7 @@ from load_data import get_baselines_s_threshold, \
 
 class Simulation(object):
     def __init__(self, mu_logs, mu_loga, beta_e, bsls_s_thrs_statuses,
-                 std_loga=None, std_logs=None, hc_scale=0.2, alpha_e=5.0):
+                 std_loga=None, std_logs=None, hc_scale=0.5, alpha_e=5.0):
         """
         Class that implements simulation of RA survey.
 
@@ -156,15 +157,18 @@ class Simulation(object):
         mu_loga = np.random.uniform(self.mu_loga[0], self.mu_loga[1])
         if self.std_loga is None:
             #std_loga = float(halfcauchy.rvs(scale=self.hc_scale, size=1))
-            #std_loga = float(np.random.uniform(0, 1))
-            std_loga = float(halfnorm.rvs(scale=self.hc_scale, size=1))
+            std_loga = float(np.random.uniform(0, 3))
+            #std_loga = float(halfnorm.rvs(scale=self.hc_scale, size=1))
         else:
             std_loga = np.random.uniform(self.std_loga[0], self.std_loga[1])
-        mu_logs = np.random.uniform(self.mu_logs[0], self.mu_logs[1])
+        #mu_logs = np.random.uniform(self.mu_logs[0], self.mu_logs[1])
+        mu_logs = np.random.normal(0.21, 2 * 0.9)
         if self.std_logs is None:
             #std_logs = float(halfcauchy.rvs(scale=self.hc_scale, size=1))
             #std_logs = float(np.random.uniform(0, 1))
-            std_logs = float(halfnorm.rvs(scale=self.hc_scale, size=1))
+            #std_logs = float(halfnorm.rvs(scale=self.hc_scale, size=1))
+            tau_logs = float(np.random.gamma(2., scale=1., size=1))
+            std_logs = 1. / math.sqrt(tau_logs)
         else:
             std_logs = np.random.uniform(self.std_logs[0], self.std_logs[1])
         beta_e = np.random.uniform(self.beta_e[0], self.beta_e[1])
@@ -238,7 +242,7 @@ if __name__ == '__main__':
     else:
         sys.exit('USE c OR l!')
     print "Using " + band + "-band"
-    bsls_s_thrs_statuses = get_baselines_s_threshold(band)
+    bsls_s_thrs_statuses, names = get_baselines_s_threshold(band)
 
     bsls_borders = [2., 5., 10., 17., 30.]
 
