@@ -208,6 +208,8 @@ def get_baselines_s_threshold(band, struct_array=None):
                                    return_index=True)
     # List for collecting results
     results = list()
+    # List for collecting source_names
+    names = list()
     # Loop over unique experiments to find threshold flux
     for exp in exp_names_u:
         exp_array = struct_array[np.where(struct_array['exper_name'] == exp)]
@@ -255,12 +257,13 @@ def get_baselines_s_threshold(band, struct_array=None):
         s_thr_result = s_thr_from_obs_row((observation))
         if s_thr_result is not None:
             results.append([observation['base_ed'], s_thr_result, status])
+            names.append(observation['source'])
 
     dtype = [('bl', '>f4'), ('s_thr', '>f4'), ('status', '|S1')]
     output = np.zeros(len(results), dtype=dtype)
     output['bl'], output['s_thr'], output['status'] = zip(*results)
 
-    return output
+    return output, names
 
 
 def get_baselines_exper_averaged(fname):
