@@ -28,49 +28,31 @@ def flux_from_1_asymmetric(r, pa, amp, std_x, e):
                         (2. * std_u ** 2. * (1. + np.tan(pa) ** 2.)))
 
 
-def flux_from_1_asymmetric_full(u, v, s_full, bmaj, e, bpa=0, x0=0, y0=0):
+def ft_of_delta(uv, s_full, x0=0., y0=0.):
     """
-    Return complex flux of elliptical gaussian source with major axis std
-    ``bmaj`` (which corresponds to FWHM = 2 * sqrt(2 * log(2)) * ``std``) and
-     positional angle of major axis equals to ``bpa`` (from x to y of image
-     plane) at uv-point (``u``,``v``) of uv-plane.
-
-    :param u:
-        u-coordinate [lambda^(-1)].
-    :param v:
-        v-coordinate [lambda^(-1)].
+    Returns value of the Fourier transform of delta function with full flux
+    ``s_full`` and position ``x0``, ``y0`` in image plane at points ``u``, ``v``
+    of uv-plane.
+    :param uv:
+        2D numpy array of uv-coordinates [lambda^(-1)].
     :param s_full:
         Full flux of component [Jy].
-    :param bmaj:
-        Major axis std in image plane [rad].
-    :param bpa:
-        Positional angle of major axis in image plane (from x to y) [rad].
-    :param e:
-        Ratio of minor to major axis of elliptical component.
-    :param x0:
-        Center of component in image plane [rad].
-    :param y0:
-        Center of component in image plane [rad].
+    :param x0: (optional)
+        Position of delta-function in image plane [rad].
+    :param y0: (optional)
+        Position of delta-function in image plane [rad].
     :return:
-        Complex value of correlated flux at given uv-point.
+        Numpy array of FT values at given points of uv-plane.
     """
-    # Rotate the uv-plane on angle ``-bpa``
-    u_ = u * math.cos(bpa) + v * math.sin(bpa)
-    v_ = -u * math.sin(bpa) + v * math.cos(bpa)
-
-    bmin = bmaj * e
-    ft = s_full * math.pi * bmaj * bmin * np.exp(-math.pi ** 2 * 1j *
-                                              (bmaj ** 2 * u_ ** 2 +
-                                               bmin ** 2 * v_ ** 2))
-    # Multiply on phases of ``x0``, ``y0`` in rotated system
-    x0_ = x0 * math.cos(bpa) + y0 * math.sin(bpa)
-    y0_= -x0 * math.sin(bpa) + y0 * math.cos(bpa)
-    ft *= math.exp(2 * math.pi * 1j * (x0_ * u_ + y0_ * v_))
-
+    ft = np.empty(np.shape(uv)[-1], dtype=complex)
+    ft[:] = s_full
+    # If x0=!0 or y0=!0 then shift phase
+    if x0 or y0:
+        ft *= np.exp(-2. * math.pi * 1j * (uv[0] * x0 + uv[1] * y0))
     return ft
 
 
-def ft_of_2d_gaussian(u, v, s_full, bmaj, e, bpa=0, x0=0, y0=0):
+def ft_of_2d_gaussian(uv, s_full, bmaj, e, bpa=0., x0=0., y0=0.):
     """
     Returns value of the Fourier transform of 2d elliptical gaussian with major
     axis ``bmaj``, full flux ``s_full``, axis ratio ``e``, positional angle of
@@ -123,88 +105,17 @@ def ft_of_2d_gaussian(u, v, s_full, bmaj, e, bpa=0, x0=0, y0=0):
         math.cos(theta) ** 2. / (2. * std_y ** 2.)
     # Calculate the value of FT in point (u,v) for x0=0,y0=0 case using (2)
     k = (4. * a * c - b ** 2.)
+    # In our parametrization we need only functional dependence as flux at zero
+    # uv-spacings is given by ``s_full``.
     #ft = s_full * 2. * math.pi * k ** (-0.5) * math.exp((4. * math.pi ** 2. / k)
     #                                                    * (-c * u ** 2. +
     #                                                       b * u * v -
     #                                                       a * v ** 2.))
-    ft = s_full * math.exp((4. * math.pi ** 2. / k) * (-c * u ** 2. +
-                                                       b * u * v -
-                                                       a * v ** 2.))
+    ft = s_full * math.exp((4. * math.pi ** 2. / k) * (-c * uv[0] ** 2. +
+                                                       b * uv[0] * uv[1] -
+                                                       a * uv[1] ** 2.))
     ft = complex(ft)
     # If x0=!0 or y0=!0 then shift phase
     if x0 or y0:
-        ft *= math.exp(-2. * math.pi * 1j * (u * x0 + v * y0))
-
-    return ft
-
-
-def flux_from_2_asymmetric(u, v, s_full, e_s, b_maj_small, e_b_small,
-                           b_maj_big, e_b_big, d_pa):
-    """
-    Return flux of source that consists of 2 elliptical gaussian components with
-    major axis of small component (along x-axis, which corresponds to u-axis)
-    FWHM = 2 * sqrt(2 * log(2)) * ``b_maj_small`` at uv-radius ``r`` and
-    positional angle ``pa``. Second component has major axis ``b_maj_big`` and
-    difference between positional angles of 2 gaussians (small gaussian pa - big
-    gaussian pa) equals ``d_pa``.
-
-    :param r:
-    :param pa:
-    :param s_full:
-    :param e_s:
-    :param b_maj_small:
-    :param e_b_small:
-    :param b_maj_big:
-    :param e_b_big:
-    :param d_pa:
-    :return:
-    """
-    pass
-
-
-def ft_2dgaussian(uvs, amp, x0, y0, bmaj, bmin, bpa):
-    """
-    Return the Fourie Transform of 2D gaussian defined in image plane by
-    it's amplitude ``amp``, center ``x0`` & ``y0``, major and minor axes
-    ``bmaj`` & ``bmin`` and positional angle of major axis ``bpa``.
-
-    :param uvs:
-        Iterable of uv-points for which calculate FT.
-
-    :param amp:
-        Amplitude of gaussian [Jy].
-
-    :param x0:
-        X-coordinate of gaussian center [rad].
-
-    :param y0:
-        Y-coordinate of gaussian center [rad].
-
-    :param bmaj:
-        Size of major axis [rad].
-
-    :param bmin:
-        Size of min axis [rad].
-
-    :param bpa:
-        Positional angle of major axis [rad].
-
-    :return:
-        Numpy array of complex visibilities for specified points ``uvs``.
-        Length of resulting array = len(uvs).
-    """
-    # Rotate the uv-plane on angle -bpa
-    uvs_ = uvs.copy()
-    uvs_[:, 0] = uvs[:, 0] * math.cos(bpa) + uvs[:, 1] * math.sin(bpa)
-    uvs_[:, 1] = -uvs[:, 0] * math.sin(bpa) + uvs[:, 1] * math.cos(bpa)
-    # Sequence of FT of gaussian(amp, x0=0, y0=0, bmaj, bmin) with len(ft) =
-    # len(uvs)
-    ft = amp * math.pi * bmaj * bmin * np.exp(-math.pi ** 2 *
-                                              (bmaj ** 2 * uvs_[:, 0] ** 2 +
-                                               bmin ** 2 * uvs_[:, 1] ** 2))
-    # Multiply on phases of x0, y0 in rotated system
-    x0_ = x0 * math.cos(bpa) + y0 * math.sin(bpa)
-    y0_= -x0 * math.sin(bpa) + y0 * math.cos(bpa)
-    ft *= np.exp(2 * math.pi * 1j * (x0_ * uvs_[:, 0] + y0_ * uvs_[:, 1]))
-
+        ft *= np.exp(-2. * math.pi * 1j * (uv[0] * x0 + uv[1] * y0))
     return ft
