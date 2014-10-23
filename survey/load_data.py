@@ -320,7 +320,7 @@ def get_detection_fraction_in_baseline_range(fname, bsls_borders):
 
 
 def get_detection_fractions_in_baseline_ranges(bsls_s_thrs_status,
-                                               bsls_borders):
+                                               bsls_borders, cred_mass=0.5):
     array_ = bsls_s_thrs_status
     fractions = list()
     for i in range(len(bsls_borders) - 1):
@@ -330,7 +330,7 @@ def get_detection_fractions_in_baseline_ranges(bsls_s_thrs_status,
                                                  bsls_borders[i + 1]))]
         n_det = list(array__['status']).count('y')
         n_all = len(array__)
-        fractions.append(get_ratio_hdi(n_det, n_all,cred_mass=0.5))
+        fractions.append(get_ratio_hdi(n_det, n_all,cred_mass=cred_mass))
     return fractions
 
 
