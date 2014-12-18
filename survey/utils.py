@@ -1,4 +1,5 @@
 import re
+import math
 import numpy as np
 from scipy.optimize import fmin
 from scipy.stats import beta as sbeta
@@ -10,6 +11,7 @@ rad_to_mas = 206.3 * 10 ** 6
 
 def ed_to_uv(r, lambda_cm=18.):
     return r * 12742. * 100000. / lambda_cm
+
 
 def partition_baselines(bsls, s_thrs, borders):
     """
@@ -70,6 +72,24 @@ def flux(r, pa, amp, std_x, e):
 
     return amp * np.exp(-(r ** 2. * (1. + e ** 2. * np.tan(pa) ** 2.)) /
                         (2. * std_u ** 2. * (1. + np.tan(pa) ** 2.)))
+
+
+def flux_(b, v0, tb):
+    """
+    Flux of circular gaussian source with full flux ``v0`` and brightness
+    temperature ``tb`` at baseline ``b``.
+    :param b:
+        Baseline [baseline, ED]
+    :param v0:
+        Amplitude of component [Jy].
+    :param tb:
+        Brightness temperature of source [K].
+    :return:
+        Value of correlated flux.
+    """
+    b *= 12742. * 10. ** 3
+    k = 1.38 * 10 ** (-23)
+    return v0 * np.exp(-math.pi * b ** 2. * v0 * 10 ** (-26) / (2. * k * tb))
 
 
 def size(flux, r, flux0, r0=1.):
