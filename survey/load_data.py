@@ -334,6 +334,21 @@ def get_detection_fractions_in_baseline_ranges(bsls_s_thrs_status,
     return fractions
 
 
+def get_detection_fractions_in_baseline_ranges_(bsls_s_thrs_status,
+                                                bsls_borders):
+    array_ = bsls_s_thrs_status
+    fractions = list()
+    for i in range(len(bsls_borders) - 1):
+        array__ = array_[np.where(np.logical_and(vfloat(array_['bl']) >
+                                                 bsls_borders[i],
+                                                 vfloat(array_['bl']) <
+                                                 bsls_borders[i + 1]))]
+        n_det = list(array__['status']).count('y')
+        n_all = len(array__)
+        fractions.append(float(n_det) / n_all)
+    return fractions
+
+
 def get_experiments_for_each_source(data):
     adata = np.atleast_2d(data)
     exp_names, sources, base_ed, status = zip(*data)
