@@ -1,6 +1,7 @@
 import sys
 import math
 import numpy as np
+import cPickle
 from scipy.stats import halfcauchy, halfnorm
 from utils import flux, mas_to_rad, rad_to_mas, ed_to_uv, get_ratio_hdi, \
     partition_baselines_, flux_
@@ -95,6 +96,7 @@ class Simulation(object):
                                                               bsls_borders)
         # Save detection fractions as data summary statistics
         self._data_sum = np.array(fr_list)
+        print "Data summary statistics : ", self._data_sum
         # Assertion on consistency
         assert(len(fr_list) == len(bsls_borders) - 1)
         # Initialize counting variable
@@ -110,22 +112,28 @@ class Simulation(object):
             # Use custom generator for pa generation to get the same random pa's
             self.random_state = rstate0
             params = self.draw_parameters()
-            #print "Trying parameters " + str(params)
+            print "Trying parameters " + str(params)
             # Create list to collect summary statistics
             summary_statistics = []
             # For each range of baselines check summary statistics
             for i, bsls_s_thrs in enumerate(bsls_s_thrs_partitioned):
+                #print "bsls_s_thrs", bsls_s_thrs
 
                 n_ = len(bsls_s_thrs)
-                baselines = ed_to_uv(bsls_s_thrs['bl'])
+                baselines = bsls_s_thrs['bl']
                 s_thrs = bsls_s_thrs['s_thr']
                 sample = self.create_sample(params, size=n_)
+                #print "Using sample :", sample
                 det_fr = self.observe_sample(sample, baselines, s_thrs)
+                print "detection fr.", det_fr
                 summary_statistics.append(det_fr)
 
             summary_statistics = np.array(summary_statistics)
+            print "Parameter's data summary statistics : ", summary_statistics
             d = math.sqrt(((summary_statistics - self._data_sum) ** 2 /
                            self._data_sum ** 2).sum())
+            print "Distance is__________________________>"
+            print d
             if d < eps:
                 print "This parameter is accepted!"
                 n += 1
@@ -141,7 +149,7 @@ class Simulation(object):
         std_logtb = np.random.uniform(self.std_logtb[0], self.std_logtb[1])
         mu_logtb = np.random.uniform(self.mu_logtb[0], self.mu_logtb[1])
         # Based on VSOP N(0.21, 0.9) C-band data
-        mu_logs = np.random.normal(0.21, 0.9)
+        mu_logs = np.random.normal(0.21, 0.1)
         std_logs = np.random.uniform(self.std_logs[0], self.std_logs[1])
         return mu_logs, std_logs, mu_logtb, std_logtb
 
@@ -162,7 +170,7 @@ class Simulation(object):
         # Draw sample of size ``size`` from distributions with parameters
         logs = np.random.normal(mu_logs, std_logs, size=size)
         logtb = np.random.normal(mu_logtb, std_logtb, size=size)
-        return np.exp(logs), 10 ** (logtb)
+        return np.exp(logs), np.exp(logtb)
 
     def observe_sample(self, sample, baselines, s_thrs):
         """
@@ -177,8 +185,15 @@ class Simulation(object):
             Detection fraction.
         """
         v0, tb = sample
+        #print "v0"
+        #print v0
+        #print "tb"
+        #print tb
+        #print "baselines"
+        #print baselines
         n = len(baselines)
         fluxes = flux_(baselines, v0, tb)
+        print "Fluxes :", fluxes[::10]
         n_det = len(np.where(fluxes > 5. * s_thrs)[0])
         return float(n_det) / n
 
@@ -203,11 +218,18 @@ if __name__ == '__main__':
     else:
         sys.exit('USE c OR l!')
     print "Using " + band + "-band"
-    bsls_s_thrs_statuses, names = get_baselines_s_threshold(band)
+    file_ = open('bsls_s_thrs_statuses.dat', 'r')
+    bsls_s_thrs_statuses = cPickle.load(file_)
+    file_.close()
+    #bsls_s_thrs_statuses, names = get_baselines_s_threshold(band)
+    #file_ = open('bsls_s_thrs_statuses.dat', 'w')
+    #cPickle.dump(bsls_s_thrs_statuses, file_)
+    #file_.close()
 
+    # [ 0.66911765  0.41517857  0.16058394  0.04693141] - fractions
     bsls_borders = [2., 5., 10., 17., 30.]
 
     print "Using " + str(bsls_borders)
-    #simulation = Simulation([-4., -0.], [-6., 0.], [1., 35.],
-    #                        bsls_s_thrs_statuses)
-    #simulation.run(500, bsls_borders=bsls_borders)
+    sim = Simulation(None, [26., 29.], bsls_s_thrs_statuses,
+                     std_logs=[0.5, 1.5], std_logtb=[0., .5])
+    sim.run(10, 1, bsls_borders=bsls_borders)
