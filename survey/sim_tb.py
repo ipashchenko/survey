@@ -112,7 +112,7 @@ class Simulation(object):
             # Use custom generator for pa generation to get the same random pa's
             self.random_state = rstate0
             params = self.draw_parameters()
-            print "Trying parameters " + str(params)
+            #print "Trying parameters " + str(params)
             # Create list to collect summary statistics
             summary_statistics = []
             # For each range of baselines check summary statistics
@@ -125,15 +125,15 @@ class Simulation(object):
                 sample = self.create_sample(params, size=n_)
                 #print "Using sample :", sample
                 det_fr = self.observe_sample(sample, baselines, s_thrs)
-                print "detection fr.", det_fr
+                #print "detection fr.", det_fr
                 summary_statistics.append(det_fr)
 
             summary_statistics = np.array(summary_statistics)
-            print "Parameter's data summary statistics : ", summary_statistics
+            #print "Parameter's data summary statistics : ", summary_statistics
             d = math.sqrt(((summary_statistics - self._data_sum) ** 2 /
                            self._data_sum ** 2).sum())
-            print "Distance is__________________________>"
-            print d
+            #print "Distance is__________________________>"
+            #print d
             if d < eps:
                 print "This parameter is accepted!"
                 n += 1
@@ -149,7 +149,8 @@ class Simulation(object):
         std_logtb = np.random.uniform(self.std_logtb[0], self.std_logtb[1])
         mu_logtb = np.random.uniform(self.mu_logtb[0], self.mu_logtb[1])
         # Based on VSOP N(0.21, 0.9) C-band data
-        mu_logs = np.random.normal(0.21, 0.1)
+        # actually logS ~ N(-0.43, 0.94)
+        mu_logs = np.random.uniform(-3., 2.)
         std_logs = np.random.uniform(self.std_logs[0], self.std_logs[1])
         return mu_logs, std_logs, mu_logtb, std_logtb
 
@@ -193,7 +194,7 @@ class Simulation(object):
         #print baselines
         n = len(baselines)
         fluxes = flux_(baselines, v0, tb)
-        print "Fluxes :", fluxes[::10]
+        #print "Fluxes :", fluxes[::10]
         n_det = len(np.where(fluxes > 5. * s_thrs)[0])
         return float(n_det) / n
 
@@ -230,6 +231,6 @@ if __name__ == '__main__':
     bsls_borders = [2., 5., 10., 17., 30.]
 
     print "Using " + str(bsls_borders)
-    sim = Simulation(None, [26., 29.], bsls_s_thrs_statuses,
-                     std_logs=[0.5, 1.5], std_logtb=[0., .5])
-    sim.run(10, 1, bsls_borders=bsls_borders)
+    sim = Simulation(None, [26., 32.], bsls_s_thrs_statuses,
+                     std_logs=[0.0, 8.5], std_logtb=[0., 7.5])
+    sim.run(300, 0.15, bsls_borders=bsls_borders)
