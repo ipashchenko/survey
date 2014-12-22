@@ -62,6 +62,7 @@ survey/.ropeproject/
 
 # Data files
 *.txt
+*.dat
 
 # Pictures
 *.png
