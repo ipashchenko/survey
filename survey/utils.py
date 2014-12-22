@@ -87,7 +87,7 @@ def flux_(b, v0, tb):
     :return:
         Value of correlated flux.
     """
-    b *= 12742. * 10. ** 3
+    b = b * 12742. * 10. ** 3
     k = 1.38 * 10 ** (-23)
     return v0 * np.exp(-math.pi * b ** 2. * v0 * 10 ** (-26) / (2. * k * tb))
 
