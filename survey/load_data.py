@@ -172,7 +172,7 @@ def s_thr_from_obs_row(row, raise_ra=True, n_q=0.637, dnu=16. * 10 ** 6, n=2):
 
 
 # TODO: Execute query with asc.db.DB class before fetching results.
-def get_baselines_s_threshold(band, struct_array=None):
+def get_data_for_simulation(band, struct_array=None):
     """
     Returns numpy 2D-arrays of (baseline, s_thr, stutus), where s_thr is
     determined by integration time and ground station.
@@ -261,7 +261,7 @@ def get_baselines_s_threshold(band, struct_array=None):
             names.append(observation['source'])
 
     dtype = [('source', '|S8'), ('bl', '>f4'), ('s_thr', '>f4'),
-             ('status', '|S1'), ('sample', '>f4', (2,))]
+             ('status', '|S1'), ('sample', '>f4', (2,)), ('flux', '>f4')]
     output = np.zeros(len(results), dtype=dtype)
     output['source'], output['bl'], output['s_thr'], output['status']\
         = zip(*results)
