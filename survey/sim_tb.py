@@ -10,7 +10,7 @@ from load_data import get_baselines_s_threshold, \
 
 
 class Simulation(object):
-    def __init__(self, mu_logs, mu_logtb, bsls_s_thrs_statuses,
+    def __init__(self, mu_logs, mu_logtb, source_bsls_sthrs_status_pars,
                  std_logs=None, std_logtb=None):
         """
         Class that implements simulation of RA survey.
@@ -21,8 +21,9 @@ class Simulation(object):
         :param mu_logtb:
             2 values for min & max of uniform prior range on mean of log(Tb)
             [log(K)].
-        :param bsls_s_thrs_statuses:
-            Array-like of (baseline, threshold flux, status) [ED, Jy, y/n].
+        :param source_bsls_sthrs_status_pars:
+            Array-like of (source, baseline, threshold flux, status, par)
+            [str, ED, Jy, y/n, array].
         :param std_logs: (optional)
             2 values for min & max of uniform prior range on std of log(full
             flux) [log(Jy)].
@@ -34,7 +35,8 @@ class Simulation(object):
         self.std_logs = std_logs
         self.mu_logtb = mu_logtb
         self.std_logtb = std_logtb
-        self.bsls_s_thrs_statuses = bsls_s_thrs_statuses
+        self.source_bsls_sthrs_status_pars = source_bsls_sthrs_status_pars
+        self.sources = np.unique(self.source_bsls_sthrs_status_pars['source'])
         self._p = []
         # List for keeping fractions for accepted parameters
         self._summary = []
@@ -92,7 +94,7 @@ class Simulation(object):
             to observed ones within specified tolerance.
         """
         # Calculate detection fractions in given baseline ranges
-        fr_list = get_detection_fractions_in_baseline_ranges_(self.bsls_s_thrs_statuses,
+        fr_list = get_detection_fractions_in_baseline_ranges_(self.source_bsls_sthrs_status_pars,
                                                               bsls_borders)
         # Save detection fractions as data summary statistics
         self._data_sum = np.array(fr_list)
@@ -105,26 +107,38 @@ class Simulation(object):
         if rstate0 is None:
             rstate0 = self.random_state
 
-        # Partition baselines in ranges
-        bsls_s_thrs_partitioned = partition_baselines_(self.bsls_s_thrs_statuses[['bl', 's_thr']],
-                                                       bsls_borders)
         while n <= n_acc:
-            # Use custom generator for pa generation to get the same random pa's
-            self.random_state = rstate0
+            # Copy array to insert different parameters each iteration of
+            # ``while`` circle
+            source_bsls_sthrs_status_pars = self.source_bsls_sthrs_status_pars.copy()
+            # Draw parameters of distributions from priors
             params = self.draw_parameters()
-            #print "Trying parameters " + str(params)
+            # Draw parameters of #sources sources from distributions
+            sample = self.create_sample(params,
+                                        size=len(self.sources))
+            # Put parameters of each source to dictionary
+            source_pars_dict = dict()
+            for i, source in enumerate(self.sources):
+                source_pars_dict.update({source: np.dstack(sample)[0, ...][i]})
+            # Fill parameters field
+            for source in self.sources:
+                source_bsls_sthrs_status_pars[np.where(self.source_bsls_sthrs_status_pars['source']
+                                                       == source)]['sample']\
+                    = source_pars_dict[source]
             # Create list to collect summary statistics
             summary_statistics = []
-            # For each range of baselines check summary statistics
-            for i, bsls_s_thrs in enumerate(bsls_s_thrs_partitioned):
+            # Partition baselines in specified ranges
+            source_bsls_sthrs_status_pars_partitioned = partition_baselines_(self.source_bsls_sthrs_status_pars,
+                                                                             bsls_borders)
+            for i, bsls_s_thrs in enumerate(source_bsls_sthrs_status_pars_partitioned):
                 #print "bsls_s_thrs", bsls_s_thrs
-
-                n_ = len(bsls_s_thrs)
+                sources = bsls_s_thrs['source']
                 baselines = bsls_s_thrs['bl']
                 s_thrs = bsls_s_thrs['s_thr']
-                sample = self.create_sample(params, size=n_)
                 #print "Using sample :", sample
-                det_fr = self.observe_sample(sample, baselines, s_thrs)
+                # TODO: construct sample
+                det_fr = self.observe_sample(bsls_s_thrs['sample'], baselines,
+                                             s_thrs)
                 #print "detection fr.", det_fr
                 summary_statistics.append(det_fr)
 
@@ -150,8 +164,9 @@ class Simulation(object):
         mu_logtb = np.random.uniform(self.mu_logtb[0], self.mu_logtb[1])
         # Based on VSOP N(0.21, 0.9) C-band data
         # actually logS ~ N(-0.43, 0.94)
-        mu_logs = np.random.uniform(-3., 2.)
-        std_logs = np.random.uniform(self.std_logs[0], self.std_logs[1])
+        mu_logs = -0.43
+        std_logs = 0.94
+        #std_logs = np.random.uniform(self.std_logs[0], self.std_logs[1])
         return mu_logs, std_logs, mu_logtb, std_logtb
 
     def create_sample(self, parameters, size):
@@ -232,5 +247,5 @@ if __name__ == '__main__':
 
     print "Using " + str(bsls_borders)
     sim = Simulation(None, [26., 32.], bsls_s_thrs_statuses,
-                     std_logs=[0.0, 8.5], std_logtb=[0., 7.5])
-    sim.run(300, 0.15, bsls_borders=bsls_borders)
+                     std_logtb=[0., 7.5])
+    sim.run(200, 0.25, bsls_borders=bsls_borders)

@@ -256,12 +256,15 @@ def get_baselines_s_threshold(band, struct_array=None):
             s_thr_from_obs_row(observation), status
         s_thr_result = s_thr_from_obs_row((observation))
         if s_thr_result is not None:
-            results.append([observation['base_ed'], s_thr_result, status])
+            results.append([observation['source'], observation['base_ed'],
+                            s_thr_result, status])
             names.append(observation['source'])
 
-    dtype = [('bl', '>f4'), ('s_thr', '>f4'), ('status', '|S1')]
+    dtype = [('source', '|S8'), ('bl', '>f4'), ('s_thr', '>f4'),
+             ('status', '|S1'), ('sample', '>f4', (2,))]
     output = np.zeros(len(results), dtype=dtype)
-    output['bl'], output['s_thr'], output['status'] = zip(*results)
+    output['source'], output['bl'], output['s_thr'], output['status']\
+        = zip(*results)
 
     return output, names
 
@@ -398,6 +401,35 @@ def get_data_for_each_source(data):
 
     return source_dict
 
+
+def get_baselines_for_each_source(band, struct_array=None):
+    """
+    Get baseline information for each source observed.
+    :param struct_array:
+    :return:
+    """
+    if struct_array is None:
+        struct_array = get_array_from_dbtable()
+    source_dict = dict()
+    output, names = get_baselines_s_threshold(band, struct_array)
+    anames = np.array(names)
+    unames = np.unique(names)
+    for name in unames:
+        baselines = output[np.where(anames == name)[0]]['bl']
+        source_dict.update({name: baselines})
+
+    return source_dict
+
+
+def get_nsource_occurence_in_bins(band, bsls_borders, struct_array=None):
+    occurences = list()
+    if struct_array is None:
+        struct_array = get_array_from_dbtable()
+    source_dict = get_baselines_for_each_source(band, struct_array)
+    for source in source_dict:
+        occurences.append(np.histogram(source_dict[source], bins=bsls_borders))
+
+    return occurences
 
 
 if __name__ == '__main__':
