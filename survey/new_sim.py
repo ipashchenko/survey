@@ -155,9 +155,12 @@ class Simulation(object):
         """
         mu_logtb = np.random.uniform(self.mu_logtb[0], self.mu_logtb[1])
         std_logtb = np.random.uniform(self.std_logtb[0], self.std_logtb[1])
+        #mu_logv0 = np.random.uniform(self.mu_logv0[0], self.mu_logv0[1])
+        #std_logv0 = np.random.uniform(self.std_logv0[0], self.std_logv0[1])
         # Actually VSOP gives logS ~ N(-0.43, 0.94)
-        mu_logv0 = np.random.uniform(self.mu_logv0[0], self.mu_logv0[1])
-        std_logv0 = np.random.uniform(self.std_logv0[0], self.std_logv0[1])
+        # Use this informative priors:
+        mu_logv0 = np.random.normal(-0.43, 0.15)
+        std_logv0 = np.random.lognormal(-0.1, 0.15)
         return mu_logv0, std_logv0, mu_logtb, std_logtb
 
     def create_sample(self, parameters, size):
@@ -174,8 +177,10 @@ class Simulation(object):
         """
         mu_logv0, std_logv0, mu_logtb, std_logtb = parameters
         # Draw sample of size ``size`` from distributions with parameters
-        logv0 = np.random.normal(mu_logv0, std_logv0, size=size)
-        logtb = np.random.normal(mu_logtb, std_logtb, size=size)
+        # Use the same seed for drawing a sample from distribution with
+        # specified parameters.
+        logv0 = self._random.normal(mu_logv0, std_logv0, size=size)
+        logtb = self._random.normal(mu_logtb, std_logtb, size=size)
         return np.squeeze(np.dstack((np.exp(logv0), np.exp(logtb),)))
 
     def observe_sample(self, sample, baselines, threshold_fluxes):
